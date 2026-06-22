@@ -4,6 +4,8 @@ using RealityCheck.UI;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using HarmonyLib;
+using RealityCheck.Patches;
 
 namespace RealityCheck;
 
@@ -16,6 +18,18 @@ public class ModEntry : Mod
     {
         this.ledgerService = new LedgerService(helper, this.Monitor);
         this.incomeEvents = new IncomeEvents(this.ledgerService, this.Monitor);
+
+            ShopSalePatch.Initialize(
+                this.ledgerService,
+                this.Monitor
+            );
+
+            var harmony = new Harmony(
+                this.ModManifest.UniqueID
+            );
+
+            ShopSalePatch.Apply(harmony);
+
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.Saving += this.OnSaving;
@@ -44,15 +58,15 @@ public class ModEntry : Mod
         {
             Game1.activeClickableMenu = new FinanceMenu(this.ledgerService!);
         }
-if (e.Button == SButton.I)
-{
+        if (e.Button == SButton.I)
+        {
 
-    this.ledgerService!.AddIncome(
-        "Test",
-        "Parsnip",
-        1,
-        35
-    );
-}
+            this.ledgerService!.AddIncome(
+                "Test",
+                "Parsnip",
+                1,
+                35
+            );
+        }
     }
 }

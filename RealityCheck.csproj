@@ -6,8 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.0" PrivateAssets="all" />
-  </ItemGroup>
+<ItemGroup>
+  <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.0" PrivateAssets="all" />
+<PackageReference Include="Lib.Harmony" Version="2.3.3" PrivateAssets="all" />
+</ItemGroup>
 
 </Project>

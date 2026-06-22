@@ -17,11 +17,15 @@ public class FinanceMenu : IClickableMenu
 
     private int contentTop;
     private int contentBottom;
+    private int contentStartY;
     private int currentContentHeight = 0;
+
+    private Rectangle previousScissorRectangle;
 
     private readonly Rectangle dailyTab;
     private readonly Rectangle seasonalTab;
     private readonly Rectangle annualTab;
+    private readonly Color chartColor = new Color(92, 63, 34);
 
     private enum ReportTab
     {
@@ -72,8 +76,6 @@ public class FinanceMenu : IClickableMenu
 
     public override void receiveScrollWheelAction(int direction)
     {
-        // base.receiveScrollWheelAction(direction);
-
         if (direction > 0)
             this.scrollOffset -= 80;
         else if (direction < 0)
@@ -97,6 +99,7 @@ public class FinanceMenu : IClickableMenu
 
         this.contentTop = y + 170;
         this.contentBottom = y + height - 45;
+        this.contentStartY = y + 180;
 
         IClickableMenu.drawTextureBox(
             b,
@@ -118,8 +121,16 @@ public class FinanceMenu : IClickableMenu
         );
 
         int contentX = x + 70;
-int contentStartY = y + 180;
-int contentY = contentStartY - this.scrollOffset;
+        int contentY = this.contentStartY - this.scrollOffset;
+
+        Rectangle clipArea = new Rectangle(
+            x + 50,
+            this.contentTop,
+            width - 100,
+            this.contentBottom - this.contentTop
+        );
+
+        this.BeginContentClip(b, clipArea);
 
         switch (this.currentTab)
         {
@@ -136,9 +147,46 @@ int contentY = contentStartY - this.scrollOffset;
                 break;
         }
 
-        // this.DrawScrollBar(b, x + width - 45, y + 165, height - 220);
+        this.EndContentClip(b);
 
         this.drawMouse(b);
+    }
+
+    private void BeginContentClip(SpriteBatch b, Rectangle clipArea)
+    {
+        this.previousScissorRectangle = b.GraphicsDevice.ScissorRectangle;
+
+        b.End();
+
+        b.GraphicsDevice.ScissorRectangle = clipArea;
+
+        RasterizerState rasterizerState = new RasterizerState
+        {
+            ScissorTestEnable = true
+        };
+
+        b.Begin(
+            SpriteSortMode.Deferred,
+            BlendState.AlphaBlend,
+            SamplerState.PointClamp,
+            null,
+            rasterizerState
+        );
+    }
+
+    private void EndContentClip(SpriteBatch b)
+    {
+        b.End();
+
+        b.GraphicsDevice.ScissorRectangle = this.previousScissorRectangle;
+
+        b.Begin(
+            SpriteSortMode.Deferred,
+            BlendState.AlphaBlend,
+            SamplerState.PointClamp,
+            null,
+            null
+        );
     }
 
     private int GetMaxScrollOffset()
@@ -148,49 +196,6 @@ int contentY = contentStartY - this.scrollOffset;
         return Math.Max(
             0,
             this.currentContentHeight - visibleHeight
-        );
-    }
-
-        private void DrawScrollBar(SpriteBatch b, int x, int y, int height)
-    {
-        int visibleHeight = this.contentBottom - this.contentTop;
-        int totalHeight = this.currentContentHeight;
-
-        if (totalHeight <= visibleHeight)
-            return;
-
-        int maxScroll = this.GetMaxScrollOffset();
-
-        int barHeight = Math.Max(
-            40,
-            (int)(height * (visibleHeight / (float)totalHeight))
-        );
-
-        int movableHeight = height - barHeight;
-
-        int barY = y;
-
-        if (maxScroll > 0)
-        {
-            barY = y + (int)(movableHeight * (this.scrollOffset / (float)maxScroll));
-        }
-
-        IClickableMenu.drawTextureBox(
-            b,
-            x,
-            y,
-            20,
-            height,
-            Color.LightGray
-        );
-
-        IClickableMenu.drawTextureBox(
-            b,
-            x,
-            barY,
-            20,
-            barHeight,
-            Color.White
         );
     }
 
@@ -237,13 +242,13 @@ int contentY = contentStartY - this.scrollOffset;
         var items = this.analyticsService.GetTodayItemSummaries();
 
         if (items.Count == 0)
-{
-    this.DrawLine(b, "No sales recorded today.", x, y);
+        {
+            this.DrawLine(b, "No sales recorded today.", x, y);
 
-    this.UpdateContentHeight(y + 50);
+            this.UpdateContentHeight(y + 50);
 
-    return;
-}
+            return;
+        }
 
         foreach (var item in items)
         {
@@ -256,7 +261,8 @@ int contentY = contentStartY - this.scrollOffset;
 
             y += 38;
         }
-          this.UpdateContentHeight(y + 50);
+
+        this.UpdateContentHeight(y + 50);
     }
 
     private void DrawSeasonalReport(SpriteBatch b, int x, int y)
@@ -273,13 +279,13 @@ int contentY = contentStartY - this.scrollOffset;
         var items = this.analyticsService.GetSeasonItemSummaries();
 
         if (items.Count == 0)
-{
-    this.DrawLine(b, "No sales recorded this season.", x, y);
+        {
+            this.DrawLine(b, "No sales recorded this season.", x, y);
 
-    this.UpdateContentHeight(y + 150);
+            this.UpdateContentHeight(y + 150);
 
-    return;
-}
+            return;
+        }
 
         foreach (var item in items)
         {
@@ -295,32 +301,49 @@ int contentY = contentStartY - this.scrollOffset;
 
         y += 60;
 
-       this.DrawLine(
+        this.DrawLine(b, "28-Day Income Trend", x, y);
+        y += 50;
+
+        var trend = this.analyticsService.GetSeasonDailyIncome();
+
+this.DrawSeasonTrendChart(
     b,
-    "28-Day Income Trend",
+    trend,
     x,
     y
-    );
+);
 
-            y += 45;
+y += 330;
 
-            var trend = this.analyticsService.GetSeasonDailyIncome();
+this.DrawLine(b, "Daily Income Details", x, y);
+y += 45;
 
-            for (int i = 0; i < trend.Count; i++)
-            {
-                this.DrawLine(
-                    b,
-                    $"Day {i + 1}: {trend[i]}g",
-                    x,
-                    y
-                );
+var dailyDetails = this.analyticsService.GetSeasonDailyIncomeDetailsToDate();
 
-                y += 30;
-            }
-        this.UpdateContentHeight(y + 150);
+if (dailyDetails.Count == 0)
+{
+    this.DrawLine(b, "No income days recorded this season.", x, y);
+    y += 35;
+}
+else
+{
+    foreach (var day in dailyDetails)
+    {
+        this.DrawLine(
+            b,
+            $"{day.Label}   {day.Amount}g",
+            x,
+            y
+        );
+
+        y += 30;
+    }
+}
+
+this.UpdateContentHeight(y + 150);
     }
 
-private void DrawAnnualReport(SpriteBatch b, int x, int y)
+  private void DrawAnnualReport(SpriteBatch b, int x, int y)
 {
     this.DrawLine(b, $"Year: {Game1.year}", x, y);
     y += 45;
@@ -356,30 +379,292 @@ private void DrawAnnualReport(SpriteBatch b, int x, int y)
 
     y += 60;
 
-    this.DrawLine(b, "112-day income trend: Coming Soon", x, y);
+    this.DrawLine(b, "112-Day Income Trend", x, y);
+    y += 50;
 
-    this.UpdateContentHeight(y + 150);
-}
-private void UpdateContentHeight(int finalY)
+    var trend = this.analyticsService.GetYearDailyIncome();
+
+this.DrawAnnualTrendChart(
+    b,
+    trend,
+    x,
+    y
+);
+
+y += 360;
+
+this.DrawLine(b, "Daily Income Details", x, y);
+y += 45;
+
+var dailyDetails = this.analyticsService.GetYearDailyIncomeDetailsToDate();
+
+if (dailyDetails.Count == 0)
 {
-    int contentStartY = Game1.uiViewport.Height / 2 - 300 + 180 - this.scrollOffset;
+    this.DrawLine(b, "No income days recorded this year.", x, y);
+    y += 35;
+}
+else
+{
+    foreach (var day in dailyDetails)
+    {
+        this.DrawLine(
+            b,
+            $"{day.Label}   {day.Amount}g",
+            x,
+            y
+        );
 
-    this.currentContentHeight = Math.Max(
-        0,
-        finalY - contentStartY
+        y += 30;
+    }
+}
+
+this.UpdateContentHeight(y + 150);
+}
+
+private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
+{
+    int chartWidth = 620;
+    int chartHeight = 260;
+
+    int left = x;
+    int top = y;
+    int bottom = y + chartHeight;
+    int right = x + chartWidth;
+
+    int maxValue = values.Count > 0 ? values.Max() : 0;
+
+    if (maxValue <= 0)
+        maxValue = 1;
+
+    this.DrawLineSegment(
+        b,
+        new Vector2(left, bottom),
+        new Vector2(right, bottom),
+        2
     );
 
-    this.scrollOffset = Math.Clamp(
-        this.scrollOffset,
-        0,
-        this.GetMaxScrollOffset()
+    this.DrawLineSegment(
+        b,
+        new Vector2(left, top),
+        new Vector2(left, bottom),
+        2
+    );
+
+    if (values.Count >= 2)
+    {
+        float xStep = chartWidth / (float)(values.Count - 1);
+
+        Vector2? previousPoint = null;
+
+        for (int i = 0; i < values.Count; i++)
+        {
+            float pointX = left + i * xStep;
+            float normalized = values[i] / (float)maxValue;
+            float pointY = bottom - normalized * chartHeight;
+
+            Vector2 currentPoint = new Vector2(pointX, pointY);
+
+            if (previousPoint.HasValue)
+            {
+                this.DrawLineSegment(
+                    b,
+                    previousPoint.Value,
+                    currentPoint,
+                    3
+                );
+            }
+
+            previousPoint = currentPoint;
+
+            b.Draw(
+                Game1.staminaRect,
+                new Rectangle(
+                    (int)pointX - 3,
+                    (int)pointY - 3,
+                    6,
+                    6
+                ),
+                this.chartColor
+            );
+        }
+    }
+
+    Utility.drawTextWithShadow(
+        b,
+        "1",
+        Game1.smallFont,
+        new Vector2(left - 5, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        "14",
+        Game1.smallFont,
+        new Vector2(left + chartWidth / 2 - 10, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        "28",
+        Game1.smallFont,
+        new Vector2(right - 20, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        $"{maxValue}g",
+        Game1.smallFont,
+        new Vector2(left + 10, top - 35),
+        Game1.textColor
     );
 }
+   private void DrawAnnualTrendChart(SpriteBatch b, List<int> values, int x, int y)
+{
+    int chartWidth = 620;
+    int chartHeight = 260;
+
+    int left = x;
+    int top = y;
+    int bottom = y + chartHeight;
+    int right = x + chartWidth;
+
+    int maxValue = values.Count > 0 ? values.Max() : 0;
+
+    if (maxValue <= 0)
+        maxValue = 1;
+
+    this.DrawLineSegment(
+        b,
+        new Vector2(left, bottom),
+        new Vector2(right, bottom),
+        2
+    );
+
+    this.DrawLineSegment(
+        b,
+        new Vector2(left, top),
+        new Vector2(left, bottom),
+        2
+    );
+
+    if (values.Count >= 2)
+    {
+        float xStep = chartWidth / (float)(values.Count - 1);
+
+        Vector2? previousPoint = null;
+
+        for (int i = 0; i < values.Count; i++)
+        {
+            float pointX = left + i * xStep;
+            float normalized = values[i] / (float)maxValue;
+            float pointY = bottom - normalized * chartHeight;
+
+            Vector2 currentPoint = new Vector2(pointX, pointY);
+
+            if (previousPoint.HasValue)
+            {
+                this.DrawLineSegment(
+                    b,
+                    previousPoint.Value,
+                    currentPoint,
+                    2
+                );
+            }
+
+            previousPoint = currentPoint;
+        }
+    }
+
+    Utility.drawTextWithShadow(
+        b,
+        "Spring 1",
+        Game1.smallFont,
+        new Vector2(left - 5, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        "Summer 1",
+        Game1.smallFont,
+        new Vector2(left + chartWidth * 0.25f - 25, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        "Fall 1",
+        Game1.smallFont,
+        new Vector2(left + chartWidth * 0.50f - 20, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        "Winter 1",
+        Game1.smallFont,
+        new Vector2(left + chartWidth * 0.75f - 25, bottom + 10),
+        Game1.textColor
+    );
+
+    Utility.drawTextWithShadow(
+        b,
+        $"{maxValue}g",
+        Game1.smallFont,
+        new Vector2(left + 10, top - 35),
+        Game1.textColor
+    );
+}
+
+    private void DrawLineSegment(
+        SpriteBatch b,
+        Vector2 start,
+        Vector2 end,
+        int thickness
+    )
+    {
+        Vector2 edge = end - start;
+
+        float angle = (float)Math.Atan2(edge.Y, edge.X);
+
+        b.Draw(
+            Game1.staminaRect,
+            new Rectangle(
+                (int)start.X,
+                (int)start.Y,
+                (int)edge.Length(),
+                thickness
+            ),
+            null,
+            this.chartColor,
+            angle,
+            Vector2.Zero,
+            SpriteEffects.None,
+            0
+        );
+    }
+
+    private void UpdateContentHeight(int finalY)
+    {
+        int scrolledContentStartY = this.contentStartY - this.scrollOffset;
+
+        this.currentContentHeight = Math.Max(
+            0,
+            finalY - scrolledContentStartY
+        );
+
+        this.scrollOffset = Math.Clamp(
+            this.scrollOffset,
+            0,
+            this.GetMaxScrollOffset()
+        );
+    }
+
     private void DrawLine(SpriteBatch b, string text, int x, int y)
     {
-        if (y < this.contentTop || y > this.contentBottom)
-            return;
-
         Utility.drawTextWithShadow(
             b,
             text,

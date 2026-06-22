@@ -13,8 +13,8 @@ namespace RealityCheck.UI;
 
 public class FinanceMenu : IClickableMenu
 {
-    private readonly LedgerService ledgerService;
     private readonly AnalyticsService analyticsService;
+    private readonly TaxService taxService;
 
     private ReportTab currentTab = ReportTab.Daily;
 
@@ -30,6 +30,7 @@ public class FinanceMenu : IClickableMenu
     private readonly Rectangle dailyTab;
     private readonly Rectangle seasonalTab;
     private readonly Rectangle annualTab;
+    private readonly Rectangle taxTab;
 
     private readonly Color chartColor = new Color(92, 63, 34);
 
@@ -37,7 +38,8 @@ public class FinanceMenu : IClickableMenu
     {
         Daily,
         Seasonal,
-        Annual
+        Annual,
+        Tax
     }
 
     public FinanceMenu(
@@ -45,15 +47,16 @@ public class FinanceMenu : IClickableMenu
         AnalyticsService analyticsService
     )
     {
-        this.ledgerService = ledgerService;
         this.analyticsService = analyticsService;
+        this.taxService = new TaxService(ledgerService);
 
         int x = Game1.uiViewport.Width / 2 - 400;
         int y = Game1.uiViewport.Height / 2 - 300;
 
-        this.dailyTab = new Rectangle(x + 60, y + 25, 170, 55);
-        this.seasonalTab = new Rectangle(x + 240, y + 25, 210, 55);
-        this.annualTab = new Rectangle(x + 460, y + 25, 190, 55);
+        this.dailyTab = new Rectangle(x + 35, y + 25, 150, 55);
+        this.seasonalTab = new Rectangle(x + 195, y + 25, 185, 55);
+        this.annualTab = new Rectangle(x + 390, y + 25, 150, 55);
+        this.taxTab = new Rectangle(x + 550, y + 25, 155, 55);
     }
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -75,6 +78,12 @@ public class FinanceMenu : IClickableMenu
         else if (this.annualTab.Contains(x, y))
         {
             this.currentTab = ReportTab.Annual;
+            this.scrollOffset = 0;
+            Game1.playSound("smallSelect");
+        }
+        else if (this.taxTab.Contains(x, y))
+        {
+            this.currentTab = ReportTab.Tax;
             this.scrollOffset = 0;
             Game1.playSound("smallSelect");
         }
@@ -151,6 +160,10 @@ public class FinanceMenu : IClickableMenu
             case ReportTab.Annual:
                 this.DrawAnnualReport(b, contentX, contentY);
                 break;
+
+            case ReportTab.Tax:
+                this.DrawTaxReport(b, contentX, contentY);
+                break;
         }
 
         this.EndContentClip(b);
@@ -207,9 +220,10 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawTabs(SpriteBatch b)
     {
-        this.DrawTab(b, this.dailyTab, "Daily Report", this.currentTab == ReportTab.Daily);
-        this.DrawTab(b, this.seasonalTab, "Seasonal Report", this.currentTab == ReportTab.Seasonal);
-        this.DrawTab(b, this.annualTab, "Annual Report", this.currentTab == ReportTab.Annual);
+        this.DrawTab(b, this.dailyTab, "Daily", this.currentTab == ReportTab.Daily);
+        this.DrawTab(b, this.seasonalTab, "Seasonal", this.currentTab == ReportTab.Seasonal);
+        this.DrawTab(b, this.annualTab, "Annual", this.currentTab == ReportTab.Annual);
+        this.DrawTab(b, this.taxTab, "Tax Report", this.currentTab == ReportTab.Tax);
     }
 
     private void DrawTab(SpriteBatch b, Rectangle rect, string label, bool active)
@@ -239,8 +253,6 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Date: Year {Game1.year} {Game1.currentSeason} {Game1.dayOfMonth}", x, y);
         y += 45;
 
-        y = this.DrawBalanceSummary(b, x, y);
-
         this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
         y += 35;
 
@@ -267,8 +279,6 @@ public class FinanceMenu : IClickableMenu
     {
         this.DrawLine(b, $"Season: Year {Game1.year} {Game1.currentSeason}", x, y);
         y += 45;
-
-        y = this.DrawBalanceSummary(b, x, y);
 
         this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
         y += 35;
@@ -333,8 +343,6 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Year: {Game1.year}", x, y);
         y += 45;
 
-        y = this.DrawBalanceSummary(b, x, y);
-
         this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
         y += 35;
 
@@ -393,29 +401,51 @@ public class FinanceMenu : IClickableMenu
         this.UpdateContentHeight(y + 150);
     }
 
-    private int DrawBalanceSummary(SpriteBatch b, int x, int y)
+    private void DrawTaxReport(SpriteBatch b, int x, int y)
     {
-        int outstandingBalance = this.analyticsService.GetOutstandingBalance();
+        this.DrawLine(b, "Tax Report", x, y);
+        y += 50;
 
-        this.DrawLine(
-            b,
-            $"Outstanding Balance: {this.FormatDebt(outstandingBalance)}",
-            x,
-            y
-        );
-
+        this.DrawLine(b, $"Current Tax Week: {this.taxService.GetCurrentTaxWeekLabel()}", x, y);
         y += 35;
 
-        this.DrawLine(
-            b,
-            $"Effective Balance: {this.analyticsService.GetEffectiveBalance()}g",
-            x,
-            y
-        );
-
+        this.DrawLine(b, $"Next Tax Settlement: {this.taxService.GetNextTaxSettlementLabel()}", x, y);
         y += 55;
 
-        return y;
+        this.DrawLine(b, "Income Tax", x, y);
+        y += 45;
+
+        this.DrawLine(b, $"Taxable Shipping Bin Income: {this.taxService.GetCurrentWeekTaxableShippingBinIncome()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Income Tax Bracket: {this.taxService.GetIncomeTaxBracketLabel()}", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Estimated Income Tax: {this.FormatExpense(this.taxService.GetEstimatedIncomeTax())}", x, y);
+        y += 60;
+
+        this.DrawLine(b, "Property Tax", x, y);
+        y += 45;
+
+        this.DrawLine(b, $"Estimated Property Tax: {this.FormatExpense(this.taxService.GetEstimatedPropertyTax())}", x, y);
+        y += 60;
+
+        this.DrawLine(b, "Business Property Tax", x, y);
+        y += 45;
+
+        this.DrawLine(b, $"Estimated Business Property Tax: {this.FormatExpense(this.taxService.GetEstimatedBusinessPropertyTax())}", x, y);
+        y += 60;
+
+        this.DrawLine(b, $"Estimated Total Tax Due: {this.FormatExpense(this.taxService.GetEstimatedTotalTaxDue())}", x, y);
+        y += 70;
+
+        this.DrawLine(b, "Note: Direct merchant sales are treated as tax-free cash transactions.", x, y);
+        y += 40;
+
+        this.DrawLine(b, "Property Tax and Business Property Tax are coming soon.", x, y);
+        y += 45;
+
+        this.UpdateContentHeight(y + 80);
     }
 
     private int DrawItemAndExpenseColumns(
@@ -819,14 +849,6 @@ public class FinanceMenu : IClickableMenu
     }
 
     private string FormatExpense(int amount)
-    {
-        if (amount <= 0)
-            return "0g";
-
-        return $"-{amount}g";
-    }
-
-    private string FormatDebt(int amount)
     {
         if (amount <= 0)
             return "0g";

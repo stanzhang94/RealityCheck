@@ -781,7 +781,7 @@ public class FinanceMenu : IClickableMenu
     {
         this.DrawLine(
             b,
-            $"{expense.Category}   {this.FormatExpense(expense.Amount)}",
+            $"{expense.Category}   {this.FormatSignedMoney(expense.Amount)}",
             x,
             y
         );
@@ -793,6 +793,17 @@ public class FinanceMenu : IClickableMenu
             return "0g";
 
         return $"-{amount}g";
+    }
+
+    private string FormatSignedMoney(int amount)
+    {
+        if (amount > 0)
+            return $"+{amount}g";
+
+        if (amount < 0)
+            return $"{amount}g";
+
+        return "0g";
     }
 
     private void UpdateContentHeight(int finalY)

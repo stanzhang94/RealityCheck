@@ -1,4 +1,4 @@
-using Microsoft.Xna.Framework.Input;
+using System;
 using RealityCheck.Services;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -8,6 +8,14 @@ namespace RealityCheck.Events;
 
 public class ExpenseEvents
 {
+    private const int DailyHealthInsurancePremium = 20;
+    private const double HealthInsuranceCoverageRate = 0.50;
+
+    // About 60 seconds at 60 ticks/second.
+    // This gives the game enough time to run collapse animation,
+    // rescue dialogue, and money penalty.
+    private const int CollapseDetectionWindowTicks = 3600;
+
     private readonly LedgerService ledgerService;
     private readonly IMonitor monitor;
 
@@ -15,7 +23,7 @@ public class ExpenseEvents
 
     private int suppressedExpenseAmount = 0;
 
-    private bool wasHKeyDown = false;
+    private int recentlyCollapsedTicks = 0;
 
     public ExpenseEvents(
         LedgerService ledgerService,
@@ -33,6 +41,7 @@ public class ExpenseEvents
 
         this.lastMoney = Game1.player.Money;
         this.suppressedExpenseAmount = 0;
+        this.recentlyCollapsedTicks = 0;
 
         this.monitor.Log(
             $"Expense tracker initialized. Current money: {this.lastMoney}g",
@@ -47,6 +56,7 @@ public class ExpenseEvents
 
         this.lastMoney = Game1.player.Money;
         this.suppressedExpenseAmount = 0;
+        this.recentlyCollapsedTicks = 0;
 
         this.monitor.Log(
             $"Expense tracker reset for new day. Current money: {this.lastMoney}g",
@@ -54,14 +64,45 @@ public class ExpenseEvents
         );
     }
 
+    public void OnDayEnding(object? sender, DayEndingEventArgs e)
+    {
+        if (!Context.IsWorldReady)
+            return;
+
+        this.ChargeDailyHealthInsurancePremium();
+    }
+
     public void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
     {
         if (!Context.IsWorldReady)
             return;
 
+        this.TrackCollapseFromLowHealth();
+
         this.TrackMoneyChanges();
 
-        this.HandleTestHealthInsuranceKey();
+        this.TickCollapseWindow();
+    }
+
+private void TrackCollapseFromLowHealth()
+{
+    if (Game1.player.health <= 0)
+    {
+        if (this.recentlyCollapsedTicks <= 0)
+        {
+            this.monitor.Log(
+                "Low-health collapse detected. Medical expense window opened.",
+                LogLevel.Info
+            );
+        }
+
+        this.recentlyCollapsedTicks = CollapseDetectionWindowTicks;
+    }
+}
+    private void TickCollapseWindow()
+    {
+        if (this.recentlyCollapsedTicks > 0)
+            this.recentlyCollapsedTicks--;
     }
 
     private void TrackMoneyChanges()
@@ -78,7 +119,8 @@ public class ExpenseEvents
 
         if (difference < 0)
         {
-            int expenseAmount = -difference;
+            int originalExpenseAmount = -difference;
+            int expenseAmount = originalExpenseAmount;
 
             if (this.suppressedExpenseAmount > 0)
             {
@@ -92,7 +134,7 @@ public class ExpenseEvents
 
                 this.monitor.Log(
                     $"Suppressed {suppressedAmount}g from Base Game Expenses.",
-                    LogLevel.Trace
+                    LogLevel.Info
                 );
             }
 
@@ -106,31 +148,73 @@ public class ExpenseEvents
                 );
 
                 this.monitor.Log(
-                    $"Base Game expense detected: {expenseAmount}g",
+                    $"Base Game expense recorded: {expenseAmount}g",
                     LogLevel.Info
                 );
+
+                if (this.IsMedicalCollapseExpense())
+                {
+                    this.ApplyHealthInsuranceCoverage(expenseAmount);
+
+                    this.recentlyCollapsedTicks = 0;
+                }
             }
         }
 
-        this.lastMoney = currentMoney;
+        this.lastMoney = Game1.player.Money;
     }
 
-    private void HandleTestHealthInsuranceKey()
+    private bool IsMedicalCollapseExpense()
     {
-        bool isHKeyDown = Keyboard.GetState().IsKeyDown(Keys.H);
+        return this.recentlyCollapsedTicks > 0;
+    }
 
-        if (isHKeyDown && !this.wasHKeyDown)
-        {
-            if (Game1.activeClickableMenu == null)
-            {
-                this.ChargeModExpense(
-                    "Health Insurance",
-                    20
-                );
-            }
-        }
+    private void ApplyHealthInsuranceCoverage(int medicalExpenseAmount)
+    {
+        int coverageAmount = (int)Math.Floor(
+            medicalExpenseAmount * HealthInsuranceCoverageRate
+        );
 
-        this.wasHKeyDown = isHKeyDown;
+        if (coverageAmount <= 0)
+            return;
+
+        Game1.player.Money += coverageAmount;
+
+        this.ledgerService.AddExpenseOffset(
+            "Reality Check",
+            "Health Insurance Coverage",
+            coverageAmount
+        );
+
+        this.ShowHealthInsuranceCoverageMessage(
+            coverageAmount,
+            medicalExpenseAmount
+        );
+
+        this.monitor.Log(
+            $"Health Insurance Coverage applied: +{coverageAmount}g for medical expense {medicalExpenseAmount}g",
+            LogLevel.Info
+        );
+    }
+
+private void ShowHealthInsuranceCoverageMessage(
+    int coverageAmount,
+    int medicalExpenseAmount
+)
+{
+    int coveragePercent = (int)(HealthInsuranceCoverageRate * 100);
+
+    Game1.showGlobalMessage(
+        $"Dear member of the Harvey Medical Insurance Fund, your {coveragePercent}% coverage has been paid: +{coverageAmount}g"
+    );
+}
+
+    private void ChargeDailyHealthInsurancePremium()
+    {
+        this.ChargeModExpense(
+            "Health Insurance Premium",
+            DailyHealthInsurancePremium
+        );
     }
 
     public void ChargeModExpense(

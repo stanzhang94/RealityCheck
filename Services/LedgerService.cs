@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
@@ -103,6 +104,37 @@ public class LedgerService
 
         this.monitor.Log(
             $"Expense recorded in memory: {itemName} x{quantity} = {amount}g from {source}",
+            LogLevel.Trace
+        );
+    }
+
+    public void AddExpenseOffset(
+        string source,
+        string itemName,
+        int amount
+    )
+    {
+        if (amount <= 0)
+            return;
+
+        var entry = new LedgerEntry
+        {
+            Year = Game1.year,
+            Season = Game1.currentSeason,
+            Day = Game1.dayOfMonth,
+            Type = "ExpenseOffset",
+            Source = source,
+            ItemName = itemName,
+            ItemId = "",
+            Quantity = 1,
+            Amount = amount,
+            TimeOfDay = Game1.timeOfDay
+        };
+
+        this.data.Ledger.Add(entry);
+
+        this.monitor.Log(
+            $"Expense offset recorded in memory: {itemName} = +{amount}g from {source}",
             LogLevel.Trace
         );
     }

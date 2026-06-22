@@ -56,6 +56,7 @@ public class ModEntry : Mod
         helper.Events.GameLoop.SaveLoaded += this.expenseEvents.OnSaveLoaded;
         helper.Events.GameLoop.DayStarted += this.expenseEvents.OnDayStarted;
         helper.Events.GameLoop.UpdateTicked += this.expenseEvents.OnUpdateTicked;
+        helper.Events.GameLoop.DayEnding += this.expenseEvents.OnDayEnding;
 
         this.Monitor.Log("Reality Check loaded.", LogLevel.Info);
     }

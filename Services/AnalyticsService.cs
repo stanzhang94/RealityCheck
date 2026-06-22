@@ -57,35 +57,29 @@ public class AnalyticsService
 
     public int GetTodayExpense()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-                && e.Season == Game1.currentSeason
-                && e.Day == Game1.dayOfMonth
-            )
-            .Sum(e => e.Amount);
+        return this.GetExpenseTotal(
+            Game1.year,
+            Game1.currentSeason,
+            Game1.dayOfMonth
+        );
     }
 
     public int GetSeasonExpense()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-                && e.Season == Game1.currentSeason
-            )
-            .Sum(e => e.Amount);
+        return this.GetExpenseTotal(
+            Game1.year,
+            Game1.currentSeason,
+            null
+        );
     }
 
     public int GetYearExpense()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-            )
-            .Sum(e => e.Amount);
+        return this.GetExpenseTotal(
+            Game1.year,
+            null,
+            null
+        );
     }
 
     public int GetTodayNet()
@@ -177,68 +171,29 @@ public class AnalyticsService
 
     public List<ExpenseSummary> GetTodayExpenseBreakdown()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-                && e.Season == Game1.currentSeason
-                && e.Day == Game1.dayOfMonth
-            )
-            .GroupBy(e =>
-                string.IsNullOrWhiteSpace(e.ItemName)
-                    ? "Base Game Expenses"
-                    : e.ItemName
-            )
-            .Select(g => new ExpenseSummary
-            {
-                Category = g.Key,
-                Amount = g.Sum(e => e.Amount)
-            })
-            .OrderByDescending(x => x.Amount)
-            .ToList();
+        return this.GetExpenseBreakdown(
+            Game1.year,
+            Game1.currentSeason,
+            Game1.dayOfMonth
+        );
     }
 
     public List<ExpenseSummary> GetSeasonExpenseBreakdown()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-                && e.Season == Game1.currentSeason
-            )
-            .GroupBy(e =>
-                string.IsNullOrWhiteSpace(e.ItemName)
-                    ? "Base Game Expenses"
-                    : e.ItemName
-            )
-            .Select(g => new ExpenseSummary
-            {
-                Category = g.Key,
-                Amount = g.Sum(e => e.Amount)
-            })
-            .OrderByDescending(x => x.Amount)
-            .ToList();
+        return this.GetExpenseBreakdown(
+            Game1.year,
+            Game1.currentSeason,
+            null
+        );
     }
 
     public List<ExpenseSummary> GetYearExpenseBreakdown()
     {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Expense"
-                && e.Year == Game1.year
-            )
-            .GroupBy(e =>
-                string.IsNullOrWhiteSpace(e.ItemName)
-                    ? "Base Game Expenses"
-                    : e.ItemName
-            )
-            .Select(g => new ExpenseSummary
-            {
-                Category = g.Key,
-                Amount = g.Sum(e => e.Amount)
-            })
-            .OrderByDescending(x => x.Amount)
-            .ToList();
+        return this.GetExpenseBreakdown(
+            Game1.year,
+            null,
+            null
+        );
     }
 
     public List<int> GetSeasonDailyIncome()
@@ -300,14 +255,11 @@ public class AnalyticsService
 
         for (int day = 1; day <= 28; day++)
         {
-            int expense = this.ledgerService.GetEntries()
-                .Where(e =>
-                    e.Type == "Expense"
-                    && e.Year == Game1.year
-                    && e.Season == Game1.currentSeason
-                    && e.Day == day
-                )
-                .Sum(e => e.Amount);
+            int expense = this.GetExpenseTotal(
+                Game1.year,
+                Game1.currentSeason,
+                day
+            );
 
             result.Add(expense);
         }
@@ -331,14 +283,11 @@ public class AnalyticsService
         {
             for (int day = 1; day <= 28; day++)
             {
-                int expense = this.ledgerService.GetEntries()
-                    .Where(e =>
-                        e.Type == "Expense"
-                        && e.Year == Game1.year
-                        && e.Season == season
-                        && e.Day == day
-                    )
-                    .Sum(e => e.Amount);
+                int expense = this.GetExpenseTotal(
+                    Game1.year,
+                    season,
+                    day
+                );
 
                 result.Add(expense);
             }
@@ -431,14 +380,11 @@ public class AnalyticsService
 
         for (int day = 1; day <= Game1.dayOfMonth; day++)
         {
-            int expense = this.ledgerService.GetEntries()
-                .Where(e =>
-                    e.Type == "Expense"
-                    && e.Year == Game1.year
-                    && e.Season == Game1.currentSeason
-                    && e.Day == day
-                )
-                .Sum(e => e.Amount);
+            int expense = this.GetExpenseTotal(
+                Game1.year,
+                Game1.currentSeason,
+                day
+            );
 
             if (expense <= 0)
                 continue;
@@ -480,14 +426,11 @@ public class AnalyticsService
 
             for (int day = 1; day <= lastDay; day++)
             {
-                int expense = this.ledgerService.GetEntries()
-                    .Where(e =>
-                        e.Type == "Expense"
-                        && e.Year == Game1.year
-                        && e.Season == season
-                        && e.Day == day
-                    )
-                    .Sum(e => e.Amount);
+                int expense = this.GetExpenseTotal(
+                    Game1.year,
+                    season,
+                    day
+                );
 
                 if (expense <= 0)
                     continue;
@@ -501,6 +444,84 @@ public class AnalyticsService
         }
 
         return result;
+    }
+
+    private int GetExpenseTotal(
+        int year,
+        string? season,
+        int? day
+    )
+    {
+        int expenses = this.ledgerService.GetEntries()
+            .Where(e =>
+                e.Type == "Expense"
+                && e.Year == year
+                && (season == null || e.Season == season)
+                && (day == null || e.Day == day)
+            )
+            .Sum(e => e.Amount);
+
+        int offsets = this.ledgerService.GetEntries()
+            .Where(e =>
+                e.Type == "ExpenseOffset"
+                && e.Year == year
+                && (season == null || e.Season == season)
+                && (day == null || e.Day == day)
+            )
+            .Sum(e => e.Amount);
+
+        return Math.Max(
+            0,
+            expenses - offsets
+        );
+    }
+
+    private List<ExpenseSummary> GetExpenseBreakdown(
+        int year,
+        string? season,
+        int? day
+    )
+    {
+        var expenseRows = this.ledgerService.GetEntries()
+            .Where(e =>
+                e.Type == "Expense"
+                && e.Year == year
+                && (season == null || e.Season == season)
+                && (day == null || e.Day == day)
+            )
+            .GroupBy(e =>
+                string.IsNullOrWhiteSpace(e.ItemName)
+                    ? "Base Game Expenses"
+                    : e.ItemName
+            )
+            .Select(g => new ExpenseSummary
+            {
+                Category = g.Key,
+                Amount = -g.Sum(e => e.Amount)
+            });
+
+        var offsetRows = this.ledgerService.GetEntries()
+            .Where(e =>
+                e.Type == "ExpenseOffset"
+                && e.Year == year
+                && (season == null || e.Season == season)
+                && (day == null || e.Day == day)
+            )
+            .GroupBy(e =>
+                string.IsNullOrWhiteSpace(e.ItemName)
+                    ? "Expense Offset"
+                    : e.ItemName
+            )
+            .Select(g => new ExpenseSummary
+            {
+                Category = g.Key,
+                Amount = g.Sum(e => e.Amount)
+            });
+
+        return expenseRows
+            .Concat(offsetRows)
+            .OrderBy(x => x.Amount)
+            .ToList();
     }
 
     private string FormatSeason(string season)

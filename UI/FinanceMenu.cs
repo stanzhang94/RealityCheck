@@ -439,6 +439,33 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Estimated Total Tax Due: {this.FormatExpense(this.taxService.GetEstimatedTotalTaxDue())}", x, y);
         y += 70;
 
+        this.DrawLine(b, "Tax History", x, y);
+        y += 45;
+
+        var taxRecords = this.taxService.GetRecentTaxRecords(16);
+
+        if (taxRecords.Count == 0)
+        {
+            this.DrawLine(b, "No tax records yet.", x, y);
+            y += 35;
+        }
+        else
+        {
+            foreach (var record in taxRecords)
+            {
+                this.DrawLine(
+                    b,
+                    this.taxService.GetTaxRecordSummaryLine(record),
+                    x,
+                    y
+                );
+
+                y += 35;
+            }
+        }
+
+        y += 40;
+
         this.DrawLine(b, "Note: Direct merchant sales are treated as tax-free cash transactions.", x, y);
         y += 40;
 

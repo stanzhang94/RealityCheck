@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RealityCheck.Data;
 using RealityCheck.Models;
@@ -33,6 +34,9 @@ public class LedgerService
             this.helper.Data.ReadJsonFile<SaveData>(DataPath)
             ?? new SaveData();
 
+        this.data.Ledger ??= new List<LedgerEntry>();
+        this.data.TaxRecords ??= new List<TaxRecord>();
+
         this.monitor.Log(
             "Ledger loaded from JSON.",
             LogLevel.Trace
@@ -42,6 +46,24 @@ public class LedgerService
     public List<LedgerEntry> GetEntries()
     {
         return this.data.Ledger;
+    }
+
+    public List<TaxRecord> GetTaxRecords()
+    {
+        return this.data.TaxRecords;
+    }
+
+    public void AddTaxRecord(TaxRecord record)
+    {
+        if (record.TotalTaxAmount <= 0)
+            return;
+
+        this.data.TaxRecords.Add(record);
+
+        this.monitor.Log(
+            $"Tax record added in memory: Year {record.Year} {record.Season} Week {record.WeekNumber}, total tax {record.TotalTaxAmount}g",
+            LogLevel.Trace
+        );
     }
 
     public int GetOutstandingBalance()
@@ -168,6 +190,7 @@ public class LedgerService
         );
 
         int availableMoney = Game1.player.Money;
+
         int paidAmount = Math.Min(
             availableMoney,
             amount
@@ -254,13 +277,14 @@ public class LedgerService
     public void Clear()
     {
         this.data.Ledger.Clear();
+        this.data.TaxRecords.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger and outstanding balance cleared.",
+            "Ledger, tax records, and outstanding balance cleared.",
             LogLevel.Info
         );
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using RealityCheck.Models;
 using StardewValley;
@@ -128,6 +129,31 @@ public class TaxService
             + this.GetEstimatedBusinessPropertyTax();
     }
 
+    public List<TaxRecord> GetRecentTaxRecords(int maxRecords = 16)
+    {
+        return this.ledgerService.GetTaxRecords()
+            .OrderByDescending(r => this.GetTaxRecordSortKey(r))
+            .Take(maxRecords)
+            .OrderBy(r => this.GetTaxRecordSortKey(r))
+            .ToList();
+    }
+
+    public string GetTaxRecordSummaryLine(TaxRecord record)
+    {
+        string coveredPeriod =
+            $"Y{record.Year} {this.FormatSeason(record.Season)} {record.CoveredStartDay}-{record.CoveredEndDay}";
+
+        string settlementDate =
+            $"Y{record.SettlementYear} {this.FormatSeason(record.SettlementSeason)} {record.SettlementDay}";
+
+        return $"{coveredPeriod} (Paid {settlementDate}): -{record.TotalTaxAmount}g";
+    }
+
+    public void AddTaxRecord(TaxRecord record)
+    {
+        this.ledgerService.AddTaxRecord(record);
+    }
+
     public string FormatTaxRatePercent(double rate)
     {
         int percent = (int)Math.Round(rate * 100);
@@ -165,6 +191,28 @@ public class TaxService
 
         return normalizedSource == "shippingbin"
             || normalizedSource.Contains("shippingbin");
+    }
+
+    private long GetTaxRecordSortKey(TaxRecord record)
+    {
+        int seasonIndex = this.GetSeasonIndex(record.SettlementSeason);
+
+        return
+            (record.SettlementYear * 10000L)
+            + (seasonIndex * 100L)
+            + record.SettlementDay;
+    }
+
+    private int GetSeasonIndex(string season)
+    {
+        return season switch
+        {
+            "spring" => 1,
+            "summer" => 2,
+            "fall" => 3,
+            "winter" => 4,
+            _ => 0
+        };
     }
 
     private string GetNextSeason(string season)

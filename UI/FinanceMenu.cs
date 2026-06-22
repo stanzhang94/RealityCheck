@@ -242,7 +242,7 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
         y += 35;
 
-        this.DrawLine(b, $"Today's Expenses: {this.analyticsService.GetTodayExpense()}g", x, y);
+        this.DrawLine(b, $"Today's Expenses: {this.FormatExpense(this.analyticsService.GetTodayExpense())}", x, y);
         y += 35;
 
         this.DrawLine(b, $"Today's Net: {this.analyticsService.GetTodayNet()}g", x, y);
@@ -269,7 +269,7 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
         y += 35;
 
-        this.DrawLine(b, $"Seasonal Expenses: {this.analyticsService.GetSeasonExpense()}g", x, y);
+        this.DrawLine(b, $"Seasonal Expenses: {this.FormatExpense(this.analyticsService.GetSeasonExpense())}", x, y);
         y += 35;
 
         this.DrawLine(b, $"Seasonal Net: {this.analyticsService.GetSeasonNet()}g", x, y);
@@ -332,7 +332,7 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
         y += 35;
 
-        this.DrawLine(b, $"Annual Expenses: {this.analyticsService.GetYearExpense()}g", x, y);
+        this.DrawLine(b, $"Annual Expenses: {this.FormatExpense(this.analyticsService.GetYearExpense())}", x, y);
         y += 35;
 
         this.DrawLine(b, $"Annual Net: {this.analyticsService.GetYearNet()}g", x, y);
@@ -501,7 +501,7 @@ public class FinanceMenu : IClickableMenu
             {
                 this.DrawLine(
                     b,
-                    $"{day.Label}   {day.Amount}g",
+                    $"{day.Label}   {this.FormatExpense(day.Amount)}",
                     rightX,
                     rightY
                 );
@@ -781,10 +781,18 @@ public class FinanceMenu : IClickableMenu
     {
         this.DrawLine(
             b,
-            $"{expense.Category}   {expense.Amount}g",
+            $"{expense.Category}   {this.FormatExpense(expense.Amount)}",
             x,
             y
         );
+    }
+
+    private string FormatExpense(int amount)
+    {
+        if (amount <= 0)
+            return "0g";
+
+        return $"-{amount}g";
     }
 
     private void UpdateContentHeight(int finalY)

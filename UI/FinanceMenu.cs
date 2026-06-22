@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using RealityCheck.Services;
 using StardewValley;
 using StardewValley.Menus;
+using StardewValley.ItemTypeDefinitions;
 
 namespace RealityCheck.UI;
 
@@ -250,17 +251,17 @@ public class FinanceMenu : IClickableMenu
             return;
         }
 
-        foreach (var item in items)
-        {
-            this.DrawLine(
-                b,
-                $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
-                x,
-                y
-            );
+foreach (var item in items)
+{
+    this.DrawItemSummaryLine(
+        b,
+        item,
+        x,
+        y
+    );
 
-            y += 38;
-        }
+    y += 38;
+}
 
         this.UpdateContentHeight(y + 50);
     }
@@ -287,17 +288,17 @@ public class FinanceMenu : IClickableMenu
             return;
         }
 
-        foreach (var item in items)
-        {
-            this.DrawLine(
-                b,
-                $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
-                x,
-                y
-            );
+foreach (var item in items)
+{
+    this.DrawItemSummaryLine(
+        b,
+        item,
+        x,
+        y
+    );
 
-            y += 38;
-        }
+    y += 38;
+}
 
         y += 60;
 
@@ -364,18 +365,18 @@ this.UpdateContentHeight(y + 150);
 
         return;
     }
+    
+foreach (var item in items)
+{
+    this.DrawItemSummaryLine(
+        b,
+        item,
+        x,
+        y
+    );
 
-    foreach (var item in items)
-    {
-        this.DrawLine(
-            b,
-            $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
-            x,
-            y
-        );
-
-        y += 38;
-    }
+    y += 38;
+}
 
     y += 60;
 
@@ -662,7 +663,42 @@ private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
             this.GetMaxScrollOffset()
         );
     }
+private void DrawItemSummaryLine(SpriteBatch b, RealityCheck.Models.ItemSummary item, int x, int y)
+{
+    int textX = x;
 
+    if (!string.IsNullOrWhiteSpace(item.ItemId))
+    {
+        try
+        {
+            Item iconItem = ItemRegistry.Create(item.ItemId);
+
+            iconItem.drawInMenu(
+                b,
+                new Vector2(x, y - 12),
+                0.65f,
+                1f,
+                0.9f,
+                StackDrawType.Hide,
+                Color.White,
+                false
+            );
+
+            textX = x + 55;
+        }
+        catch
+        {
+            textX = x;
+        }
+    }
+
+    this.DrawLine(
+        b,
+        $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
+        textX,
+        y
+    );
+}
     private void DrawLine(SpriteBatch b, string text, int x, int y)
     {
         Utility.drawTextWithShadow(

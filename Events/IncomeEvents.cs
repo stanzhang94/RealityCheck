@@ -44,12 +44,13 @@ public class IncomeEvents
             if (totalAmount <= 0)
                 continue;
 
-            this.ledgerService.AddIncome(
-                "Shipping Bin",
-                item.DisplayName,
-                quantity,
-                totalAmount
-            );
+this.ledgerService.AddIncome(
+    "Shipping Bin",
+    item.DisplayName,
+    quantity,
+    totalAmount,
+    item.QualifiedItemId
+);
 
             this.monitor.Log(
                 $"Shipping income recorded: {item.DisplayName} x{quantity} = {totalAmount}g",

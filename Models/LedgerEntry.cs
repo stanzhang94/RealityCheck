@@ -15,6 +15,7 @@ public class LedgerEntry
     public string Source { get; set; } = "";
 
     public string ItemName { get; set; } = "";
+    public string ItemId { get; set; } = "";
 
     public int Quantity { get; set; }
 

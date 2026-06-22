@@ -60,13 +60,18 @@ public class AnalyticsService
                 && e.Season == Game1.currentSeason
                 && e.Day == Game1.dayOfMonth
             )
-            .GroupBy(e => e.ItemName)
-            .Select(g => new ItemSummary
-            {
-                ItemName = g.Key,
-                Quantity = g.Sum(e => e.Quantity),
-                Amount = g.Sum(e => e.Amount)
-            })
+            .GroupBy(e => new
+{
+    e.ItemId,
+    e.ItemName
+})
+.Select(g => new ItemSummary
+{
+    ItemId = g.Key.ItemId,
+    ItemName = g.Key.ItemName,
+    Quantity = g.Sum(e => e.Quantity),
+    Amount = g.Sum(e => e.Amount)
+})
             .OrderByDescending(x => x.Amount)
             .ToList();
     }
@@ -78,13 +83,18 @@ public class AnalyticsService
                 && e.Year == Game1.year
                 && e.Season == Game1.currentSeason
             )
-            .GroupBy(e => e.ItemName)
-            .Select(g => new ItemSummary
-            {
-                ItemName = g.Key,
-                Quantity = g.Sum(e => e.Quantity),
-                Amount = g.Sum(e => e.Amount)
-            })
+           .GroupBy(e => new
+{
+    e.ItemId,
+    e.ItemName
+})
+.Select(g => new ItemSummary
+{
+    ItemId = g.Key.ItemId,
+    ItemName = g.Key.ItemName,
+    Quantity = g.Sum(e => e.Quantity),
+    Amount = g.Sum(e => e.Amount)
+})
             .OrderByDescending(x => x.Amount)
             .ToList();
     }
@@ -95,13 +105,18 @@ public class AnalyticsService
             e.Type == "Income"
             && e.Year == Game1.year
         )
-        .GroupBy(e => e.ItemName)
-        .Select(g => new ItemSummary
-        {
-            ItemName = g.Key,
-            Quantity = g.Sum(e => e.Quantity),
-            Amount = g.Sum(e => e.Amount)
-        })
+        .GroupBy(e => new
+{
+    e.ItemId,
+    e.ItemName
+})
+.Select(g => new ItemSummary
+{
+    ItemId = g.Key.ItemId,
+    ItemName = g.Key.ItemName,
+    Quantity = g.Sum(e => e.Quantity),
+    Amount = g.Sum(e => e.Amount)
+})
         .OrderByDescending(x => x.Amount)
         .ToList();
 }

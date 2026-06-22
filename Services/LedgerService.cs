@@ -32,7 +32,7 @@ public class LedgerService
         this.helper.Data.WriteJsonFile(SaveFilePath, this.data);
     }
 
-    public void AddIncome(string source, string itemName, int quantity, int amount)
+public void AddIncome(string source, string itemName, int quantity, int amount, string itemId = "")
     {
         var entry = new LedgerEntry
         {
@@ -42,6 +42,7 @@ public class LedgerService
             Type = "Income",
             Source = source,
             ItemName = itemName,
+            ItemId = itemId,
             Quantity = quantity,
             Amount = amount,
             TimeOfDay = Game1.timeOfDay

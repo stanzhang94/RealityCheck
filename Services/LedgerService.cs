@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
@@ -36,6 +37,7 @@ public class LedgerService
 
         this.data.Ledger ??= new List<LedgerEntry>();
         this.data.TaxRecords ??= new List<TaxRecord>();
+        this.data.PropertyTaxDailyAssessments ??= new List<PropertyTaxDailyAssessment>();
 
         this.monitor.Log(
             "Ledger loaded from JSON.",
@@ -51,6 +53,45 @@ public class LedgerService
     public List<TaxRecord> GetTaxRecords()
     {
         return this.data.TaxRecords;
+    }
+
+    public List<PropertyTaxDailyAssessment> GetPropertyTaxDailyAssessments()
+    {
+        return this.data.PropertyTaxDailyAssessments;
+    }
+
+    public bool HasPropertyTaxDailyAssessment(
+        int year,
+        string season,
+        int day
+    )
+    {
+        return this.data.PropertyTaxDailyAssessments.Any(a =>
+            a.Year == year
+            && a.Season == season
+            && a.Day == day
+        );
+    }
+
+    public void AddPropertyTaxDailyAssessment(
+        PropertyTaxDailyAssessment assessment
+    )
+    {
+        if (this.HasPropertyTaxDailyAssessment(
+            assessment.Year,
+            assessment.Season,
+            assessment.Day
+        ))
+        {
+            return;
+        }
+
+        this.data.PropertyTaxDailyAssessments.Add(assessment);
+
+        this.monitor.Log(
+            $"Property Tax daily assessment added: Year {assessment.Year} {assessment.Season} {assessment.Day}, total {assessment.TotalPropertyTaxAmount:0.##}g",
+            LogLevel.Trace
+        );
     }
 
     public void AddTaxRecord(TaxRecord record)
@@ -278,13 +319,14 @@ public class LedgerService
     {
         this.data.Ledger.Clear();
         this.data.TaxRecords.Clear();
+        this.data.PropertyTaxDailyAssessments.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger, tax records, and outstanding balance cleared.",
+            "Ledger, tax records, property tax assessments, and outstanding balance cleared.",
             LogLevel.Info
         );
     }

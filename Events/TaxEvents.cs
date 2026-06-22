@@ -42,5 +42,12 @@ public class TaxEvents
                 message
             );
         }
+
+        this.taxService.EnsureTodayPropertyTaxAssessment();
+
+        this.monitor.Log(
+            "Property Tax daily assessment checked.",
+            LogLevel.Trace
+        );
     }
 }

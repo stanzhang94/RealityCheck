@@ -9,6 +9,8 @@ public class SaveData
 
     public List<TaxRecord> TaxRecords { get; set; } = new();
 
+    public List<PropertyTaxDailyAssessment> PropertyTaxDailyAssessments { get; set; } = new();
+
     // Positive internal value.
     // UI may display this as negative debt if needed.
     public int OutstandingBalance { get; set; } = 0;

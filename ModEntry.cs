@@ -12,12 +12,24 @@ namespace RealityCheck;
 public class ModEntry : Mod
 {
     private LedgerService? ledgerService;
+    private AnalyticsService? analyticsService;
     private IncomeEvents? incomeEvents;
 
     public override void Entry(IModHelper helper)
     {
-        this.ledgerService = new LedgerService(helper, this.Monitor);
-        this.incomeEvents = new IncomeEvents(this.ledgerService, this.Monitor);
+            this.ledgerService = new LedgerService(
+                helper,
+                this.Monitor
+            );
+
+            this.analyticsService = new AnalyticsService(
+                this.ledgerService
+            );
+
+            this.incomeEvents = new IncomeEvents(
+                this.ledgerService,
+                this.Monitor
+            );
 
             ShopSalePatch.Initialize(
                 this.ledgerService,
@@ -57,7 +69,10 @@ public class ModEntry : Mod
         if (e.Button == SButton.O)
         {
             Game1.activeClickableMenu =
-                new FinanceMenu(this.ledgerService!);
+                new FinanceMenu(
+                    this.ledgerService!,
+                    this.analyticsService!
+                );
         }
         if (e.Button == SButton.R)
         {

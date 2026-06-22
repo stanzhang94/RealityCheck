@@ -15,7 +15,10 @@ public class TaxEvents
         IMonitor monitor
     )
     {
-        this.taxService = new TaxService(ledgerService);
+this.taxService = new TaxService(
+    ledgerService,
+    monitor
+);
         this.monitor = monitor;
     }
 
@@ -47,6 +50,13 @@ public class TaxEvents
 
         this.monitor.Log(
             "Property Tax daily assessment checked.",
+            LogLevel.Trace
+        );
+
+        this.taxService.EnsureTodayBusinessPropertyTaxAssessment();
+
+        this.monitor.Log(
+            "Business Property Tax daily assessment checked.",
             LogLevel.Trace
         );
     }

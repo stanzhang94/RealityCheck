@@ -193,6 +193,22 @@ public class FinanceMenu : IClickableMenu
         );
     }
 
+    private int DrawCurrentDebtSummary(SpriteBatch b, int x, int y)
+{
+    int unpaidBalance = this.analyticsService.GetOutstandingBalance();
+
+    this.DrawLine(
+        b,
+        $"Current Unpaid Balance: {this.FormatDebt(unpaidBalance)}",
+        x,
+        y
+    );
+
+    y += 55;
+
+    return y;
+}
+
     private void EndContentClip(SpriteBatch b)
     {
         b.End();
@@ -253,6 +269,8 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Date: Year {Game1.year} {Game1.currentSeason} {Game1.dayOfMonth}", x, y);
         y += 45;
 
+        y = this.DrawCurrentDebtSummary(b, x, y);
+
         this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
         y += 35;
 
@@ -277,10 +295,12 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawSeasonalReport(SpriteBatch b, int x, int y)
     {
-        this.DrawLine(b, $"Season: Year {Game1.year} {Game1.currentSeason}", x, y);
-        y += 45;
+this.DrawLine(b, $"Season: Year {Game1.year} {Game1.currentSeason}", x, y);
+y += 45;
 
-        this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
+y = this.DrawCurrentDebtSummary(b, x, y);
+
+this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
         y += 35;
 
         this.DrawLine(b, $"Seasonal Expenses: {this.FormatExpense(this.analyticsService.GetSeasonExpense())}", x, y);
@@ -340,10 +360,12 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawAnnualReport(SpriteBatch b, int x, int y)
     {
-        this.DrawLine(b, $"Year: {Game1.year}", x, y);
-        y += 45;
+this.DrawLine(b, $"Year: {Game1.year}", x, y);
+y += 45;
 
-        this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
+y = this.DrawCurrentDebtSummary(b, x, y);
+
+this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
         y += 35;
 
         this.DrawLine(b, $"Annual Expenses: {this.FormatExpense(this.analyticsService.GetYearExpense())}", x, y);
@@ -882,6 +904,14 @@ public class FinanceMenu : IClickableMenu
 
         return $"-{amount}g";
     }
+    private string FormatDebt(int amount)
+{
+    if (amount <= 0)
+        return "0g";
+
+    return $"-{amount}g";
+}
+
 
     private string FormatSignedMoney(int amount)
     {

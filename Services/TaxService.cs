@@ -1,955 +1,1286 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.Xna.Framework;
 using RealityCheck.Models;
+using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Buildings;
+using StardewValley.Locations;
 using StardewValley.TerrainFeatures;
-
+ 
 namespace RealityCheck.Services;
-
+ 
 public class TaxService
 {
-    private const int StandardFarmTheoreticalTillableTiles = 3427;
-
-    private const double WeeklyAdministrativeFee = 50.0;
-    private const double WeeklyDocumentationFee = 10.0;
-
-    private const double DailyAdministrativeFee = WeeklyAdministrativeFee / 7.0;
-    private const double DailyDocumentationFee = WeeklyDocumentationFee / 7.0;
-
-    private const double MaxWeeklyAgriculturalDeduction = 1000.0;
-    private const double MaxDailyAgriculturalDeduction = MaxWeeklyAgriculturalDeduction / 7.0;
-
-    private readonly LedgerService ledgerService;
-
-    public TaxService(LedgerService ledgerService)
-    {
-        this.ledgerService = ledgerService;
-    }
-
-    public int GetCurrentTaxWeekNumber()
-    {
-        return ((Game1.dayOfMonth - 1) / 7) + 1;
-    }
-
-    public int GetCurrentTaxWeekStartDay()
-    {
-        return ((this.GetCurrentTaxWeekNumber() - 1) * 7) + 1;
-    }
-
-    public int GetCurrentTaxWeekEndDay()
-    {
-        return Math.Min(
-            this.GetCurrentTaxWeekStartDay() + 6,
-            28
-        );
-    }
-
-    public string GetCurrentTaxWeekLabel()
-    {
-        return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekStartDay()} - {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekEndDay()}";
-    }
-
-    public string GetNextTaxSettlementLabel()
-    {
-        int endDay = this.GetCurrentTaxWeekEndDay();
-
-        if (endDay < 28)
-        {
-            return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {endDay + 1} Morning";
-        }
-
-        string nextSeason = this.GetNextSeason(Game1.currentSeason);
-        int nextYear = Game1.year;
-
-        if (Game1.currentSeason == "winter")
-            nextYear++;
-
-        return $"Year {nextYear} {this.FormatSeason(nextSeason)} 1 Morning";
-    }
-
-    public int GetCurrentWeekTaxableShippingBinIncome()
-    {
-        int startDay = this.GetCurrentTaxWeekStartDay();
-        int currentDay = Game1.dayOfMonth;
-
-        return this.GetTaxableShippingBinIncomeForPeriod(
-            Game1.year,
-            Game1.currentSeason,
-            startDay,
-            currentDay
-        );
-    }
-
-    public double GetIncomeTaxRate()
-    {
-        int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
-
-        return this.GetIncomeTaxRateForAmount(taxableIncome);
-    }
-
-    public string GetIncomeTaxBracketLabel()
-    {
-        int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
-
-        return this.GetIncomeTaxBracketLabelForAmount(taxableIncome);
-    }
-
-    public int GetEstimatedIncomeTax()
-    {
-        int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
-        double taxRate = this.GetIncomeTaxRateForAmount(taxableIncome);
-
-        return (int)Math.Floor(
-            taxableIncome * taxRate
-        );
-    }
-
-    public int GetEstimatedPropertyTax()
-    {
-        return this.GetPropertyTaxAmountForPeriod(
-            Game1.year,
-            Game1.currentSeason,
-            this.GetCurrentTaxWeekStartDay(),
-            Game1.dayOfMonth
-        );
-    }
-
-    public int GetEstimatedBusinessPropertyTax()
-    {
-        // Coming soon.
-        return 0;
-    }
-
-    public int GetEstimatedTotalTaxDue()
-    {
-        return
-            this.GetEstimatedIncomeTax()
-            + this.GetEstimatedPropertyTax()
-            + this.GetEstimatedBusinessPropertyTax();
-    }
-
-    public void EnsureTodayPropertyTaxAssessment()
-    {
-        if (this.ledgerService.HasPropertyTaxDailyAssessment(
-            Game1.year,
-            Game1.currentSeason,
-            Game1.dayOfMonth
-        ))
-        {
-            return;
-        }
-
-        PropertyTaxDailyAssessment assessment =
-            this.CalculateTodayPropertyTaxAssessment();
-
-        this.ledgerService.AddPropertyTaxDailyAssessment(
-            assessment
-        );
-    }
-
-    public PropertyTaxDailyAssessment CalculateTodayPropertyTaxAssessment()
-    {
-        double replacementCost = 0;
-        double incomePotentialValue = 0;
-        double utilityPremium = 0;
-        double riskShieldPremium = 0;
-
-        this.AddFarmhouseAssessment(
-            ref replacementCost
-        );
-
-        Farm farm = Game1.getFarm();
-
-        foreach (Building building in farm.buildings)
-        {
-            string buildingType = this.GetBuildingTypeName(building);
-
-            BuildingPropertyTaxConfig? config =
-                this.GetBuildingPropertyTaxConfig(buildingType);
-
-            if (config == null)
-                continue;
-
-            replacementCost += config.ReplacementCostAmount;
-            incomePotentialValue += config.IncomePotentialValueAmount;
-            utilityPremium += config.UtilityPremiumAmount;
-            riskShieldPremium += config.RiskShieldPremiumAmount;
-        }
-
-        if (this.IsGreenhouseUnlocked())
-        {
-            BuildingPropertyTaxConfig greenhouseConfig =
-                this.GetGreenhousePropertyTaxConfig();
-
-            replacementCost += greenhouseConfig.ReplacementCostAmount;
-            incomePotentialValue += greenhouseConfig.IncomePotentialValueAmount;
-            utilityPremium += greenhouseConfig.UtilityPremiumAmount;
-            riskShieldPremium += greenhouseConfig.RiskShieldPremiumAmount;
-        }
-
-        double depreciationFactor = this.GetDepreciationFactor();
-
-        double assessedPropertyValue =
-            (
-                replacementCost
-                + incomePotentialValue
-                + utilityPremium
-                + riskShieldPremium
-            )
-            * depreciationFactor;
-
-        double agriculturalDeduction =
-            this.GetTodayAgriculturalDeduction();
-
-        double taxablePropertyAmount = Math.Max(
-            0,
-            assessedPropertyValue - agriculturalDeduction
-        );
-
-        double totalPropertyTaxAmount =
-            taxablePropertyAmount
-            + DailyAdministrativeFee
-            + DailyDocumentationFee;
-
-        return new PropertyTaxDailyAssessment
-        {
-            Year = Game1.year,
-            Season = Game1.currentSeason,
-            Day = Game1.dayOfMonth,
-
-            ReplacementCostAmount = replacementCost,
-            IncomePotentialValueAmount = incomePotentialValue,
-            UtilityPremiumAmount = utilityPremium,
-            RiskShieldPremiumAmount = riskShieldPremium,
-            DepreciationFactor = depreciationFactor,
-            AgriculturalDeductionAmount = agriculturalDeduction,
-            AdministrativeFeeAmount = DailyAdministrativeFee,
-            DocumentationFeeAmount = DailyDocumentationFee,
-            TotalPropertyTaxAmount = totalPropertyTaxAmount
-        };
-    }
-
-    public bool TrySettlePreviousTaxWeek(out string message)
-    {
-        message = "";
-
-        if (!this.IsTaxSettlementDay())
-            return false;
-
-        if (!this.TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek))
-            return false;
-
-        if (this.HasTaxRecordForPeriod(
-            previousWeek.Year,
-            previousWeek.Season,
-            previousWeek.StartDay,
-            previousWeek.EndDay
-        ))
-        {
-            message =
-                $"Tax settlement skipped: record already exists for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
-
-            return false;
-        }
-
-        int taxableShippingBinIncome = this.GetTaxableShippingBinIncomeForPeriod(
-            previousWeek.Year,
-            previousWeek.Season,
-            previousWeek.StartDay,
-            previousWeek.EndDay
-        );
-
-        double incomeTaxRate = this.GetIncomeTaxRateForAmount(
-            taxableShippingBinIncome
-        );
-
-        int incomeTaxAmount = (int)Math.Floor(
-            taxableShippingBinIncome * incomeTaxRate
-        );
-
-        int propertyTaxAmount = this.GetPropertyTaxAmountForPeriod(
-            previousWeek.Year,
-            previousWeek.Season,
-            previousWeek.StartDay,
-            previousWeek.EndDay
-        );
-
-        int businessPropertyTaxAmount = 0;
-
-        int totalTaxAmount =
-            incomeTaxAmount
-            + propertyTaxAmount
-            + businessPropertyTaxAmount;
-
-        if (totalTaxAmount <= 0)
-        {
-            message =
-                $"No tax due for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
-
-            return false;
-        }
-
-        if (incomeTaxAmount > 0)
-        {
-            this.ledgerService.ChargeObligation(
-                "Reality Check",
-                "Income Tax",
-                incomeTaxAmount
-            );
-        }
-
-        if (propertyTaxAmount > 0)
-        {
-            this.ledgerService.ChargeObligation(
-                "Reality Check",
-                "Property Tax",
-                propertyTaxAmount
-            );
-        }
-
-        if (businessPropertyTaxAmount > 0)
-        {
-            this.ledgerService.ChargeObligation(
-                "Reality Check",
-                "Business Property Tax",
-                businessPropertyTaxAmount
-            );
-        }
-
-        var record = new TaxRecord
-        {
-            Year = previousWeek.Year,
-            Season = previousWeek.Season,
-            WeekNumber = previousWeek.WeekNumber,
-            CoveredStartDay = previousWeek.StartDay,
-            CoveredEndDay = previousWeek.EndDay,
-
-            SettlementYear = Game1.year,
-            SettlementSeason = Game1.currentSeason,
-            SettlementDay = Game1.dayOfMonth,
-
-            TaxableShippingBinIncome = taxableShippingBinIncome,
-            IncomeTaxRate = incomeTaxRate,
-
-            IncomeTaxAmount = incomeTaxAmount,
-            PropertyTaxAmount = propertyTaxAmount,
-            BusinessPropertyTaxAmount = businessPropertyTaxAmount,
-
-            TotalTaxAmount = totalTaxAmount
-        };
-
-        this.ledgerService.AddTaxRecord(record);
-
-        message =
-            $"Weekly tax settled: {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}, total -{totalTaxAmount}g.";
-
-        return true;
-    }
-
-    public List<TaxRecord> GetRecentTaxRecords(int maxRecords = 16)
-    {
-        return this.ledgerService.GetTaxRecords()
-            .OrderByDescending(r => this.GetTaxRecordSortKey(r))
-            .Take(maxRecords)
-            .OrderBy(r => this.GetTaxRecordSortKey(r))
-            .ToList();
-    }
-
-    public string GetTaxRecordSummaryLine(TaxRecord record)
-    {
-        string coveredPeriod =
-            $"Y{record.Year} {this.FormatSeason(record.Season)} {record.CoveredStartDay}-{record.CoveredEndDay}";
-
-        string settlementDate =
-            $"Y{record.SettlementYear} {this.FormatSeason(record.SettlementSeason)} {record.SettlementDay}";
-
-        return
-            $"{coveredPeriod} -> {settlementDate}: " +
-            $"Income {this.FormatTaxAmount(record.IncomeTaxAmount)} | " +
-            $"Property {this.FormatTaxAmount(record.PropertyTaxAmount)} | " +
-            $"Business {this.FormatTaxAmount(record.BusinessPropertyTaxAmount)}";
-    }
-
-    public void AddTaxRecord(TaxRecord record)
-    {
-        this.ledgerService.AddTaxRecord(record);
-    }
-
-    public string FormatTaxRatePercent(double rate)
-    {
-        int percent = (int)Math.Round(rate * 100);
-
-        return $"{percent}%";
-    }
-
-    private int GetPropertyTaxAmountForPeriod(
-        int year,
-        string season,
-        int startDay,
-        int endDay
-    )
-    {
-        double total = this.ledgerService.GetPropertyTaxDailyAssessments()
-            .Where(a =>
-                a.Year == year
-                && a.Season == season
-                && a.Day >= startDay
-                && a.Day <= endDay
-            )
-            .Sum(a => a.TotalPropertyTaxAmount);
-
-        return (int)Math.Round(
-            total,
-            MidpointRounding.AwayFromZero
-        );
-    }
-
-    private void AddFarmhouseAssessment(
-        ref double replacementCost
-    )
-    {
-        int houseUpgradeLevel = this.GetHouseUpgradeLevel();
-
-        if (houseUpgradeLevel <= 0)
-            return;
-
-        if (houseUpgradeLevel == 1)
-        {
-            replacementCost += 10000.0 / 80.0 / 7.0;
-            return;
-        }
-
-        if (houseUpgradeLevel == 2)
-        {
-            replacementCost += 75000.0 / 80.0 / 7.0;
-            return;
-        }
-
-        replacementCost += 175000.0 / 80.0 / 7.0;
-    }
-
-    private BuildingPropertyTaxConfig? GetBuildingPropertyTaxConfig(
-        string buildingType
-    )
-    {
-        string key = this.NormalizeBuildingType(buildingType);
-
-        return key switch
-        {
-            "coop" => this.CreateConfig(
-                replacementCost: 4000.0 / 80.0 / 7.0,
-                incomePotentialValue: 4.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "bigcoop" => this.CreateConfig(
-                replacementCost: 14000.0 / 80.0 / 7.0,
-                incomePotentialValue: 8.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "deluxecoop" => this.CreateConfig(
-                replacementCost: 34000.0 / 80.0 / 7.0,
-                incomePotentialValue: 12.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "barn" => this.CreateConfig(
-                replacementCost: 6000.0 / 80.0 / 7.0,
-                incomePotentialValue: 4.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "bigbarn" => this.CreateConfig(
-                replacementCost: 18000.0 / 80.0 / 7.0,
-                incomePotentialValue: 8.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "deluxebarn" => this.CreateConfig(
-                replacementCost: 43000.0 / 80.0 / 7.0,
-                incomePotentialValue: 12.0 * 175.0 / 7.0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "fishpond" => this.CreateUtilityConfig(
-                5000.0
-            ),
-
-            "mill" => this.CreateUtilityConfig(
-                2500.0
-            ),
-
-            "shed" => this.CreateUtilityConfig(
-                15000.0
-            ),
-
-            "bigshed" => this.CreateUtilityConfig(
-                35000.0
-            ),
-
-            "silo" => this.CreateUtilityConfig(
-                100.0
-            ),
-
-            "slimehutch" => this.CreateUtilityConfig(
-                10000.0
-            ),
-
-            "stable" => this.CreateUtilityConfig(
-                10000.0
-            ),
-
-            "well" => this.CreateUtilityConfig(
-                1000.0
-            ),
-
-            "cabin" => this.CreateConfig(
-                replacementCost: 100.0 / 80.0 / 7.0,
-                incomePotentialValue: 0,
-                utilityPremium: 0,
-                riskShieldPremium: 0
-            ),
-
-            "shippingbin" => this.CreateUtilityConfig(
-                250.0
-            ),
-
-            "petbowl" => this.CreateUtilityConfig(
-                5000.0
-            ),
-
-            "earthobelisk" => this.CreateUtilityConfig(
-                500000.0
-            ),
-
-            "waterobelisk" => this.CreateUtilityConfig(
-                500000.0
-            ),
-
-            "desertobelisk" => this.CreateUtilityConfig(
-                1000000.0
-            ),
-
-            "islandobelisk" => this.CreateUtilityConfig(
-                1000000.0
-            ),
-
-            "junimohut" => this.CreateUtilityConfig(
-                20000.0
-            ),
-
-            "goldclock" => this.CreateUtilityConfig(
-                10000000.0
-            ),
-
-            _ => null
-        };
-    }
-
-    private BuildingPropertyTaxConfig GetGreenhousePropertyTaxConfig()
-    {
-        double replacementCost = 35000.0 / 80.0 / 7.0;
-        double incomePotentialValue = 120.0 * 13.125 / 7.0;
-        double riskShieldPremium = incomePotentialValue * 2.0;
-
-        return this.CreateConfig(
-            replacementCost: replacementCost,
-            incomePotentialValue: incomePotentialValue,
-            utilityPremium: 0,
-            riskShieldPremium: riskShieldPremium
-        );
-    }
-
-    private BuildingPropertyTaxConfig CreateUtilityConfig(
-        double constructionCost
-    )
-    {
-        double replacementCost = constructionCost / 80.0 / 7.0;
-        double utilityPremium = replacementCost * 0.2;
-
-        return this.CreateConfig(
-            replacementCost: replacementCost,
-            incomePotentialValue: 0,
-            utilityPremium: utilityPremium,
-            riskShieldPremium: 0
-        );
-    }
-
-    private BuildingPropertyTaxConfig CreateConfig(
-        double replacementCost,
-        double incomePotentialValue,
-        double utilityPremium,
-        double riskShieldPremium
-    )
-    {
-        return new BuildingPropertyTaxConfig
-        {
-            ReplacementCostAmount = replacementCost,
-            IncomePotentialValueAmount = incomePotentialValue,
-            UtilityPremiumAmount = utilityPremium,
-            RiskShieldPremiumAmount = riskShieldPremium
-        };
-    }
-
-    private double GetDepreciationFactor()
-    {
-        return Game1.year switch
-        {
-            <= 1 => 1.00,
-            2 => 0.95,
-            3 => 0.90,
-            4 => 0.85,
-            _ => 0.80
-        };
-    }
-
-    private double GetTodayAgriculturalDeduction()
-    {
-        int plantedOutdoorTiles = this.CountOutdoorPlantedTiles();
-
-        double plantingRatio = plantedOutdoorTiles
-            / (double)StandardFarmTheoreticalTillableTiles;
-
-        plantingRatio = Math.Clamp(
-            plantingRatio,
-            0,
-            1
-        );
-
-        return MaxDailyAgriculturalDeduction * plantingRatio;
-    }
-
-    private int CountOutdoorPlantedTiles()
-    {
-        Farm farm = Game1.getFarm();
-
-        int count = 0;
-
-        foreach (var pair in farm.terrainFeatures.Pairs)
-        {
-            if (pair.Value is HoeDirt dirt && dirt.crop != null)
-                count++;
-        }
-
-        return count;
-    }
-
-    private bool IsGreenhouseUnlocked()
-    {
-        Farm farm = Game1.getFarm();
-
-        var field = farm.GetType().GetField("greenhouseUnlocked");
-
-        object? rawValue = field?.GetValue(farm);
-
-        if (rawValue == null)
-        {
-            var property = farm.GetType().GetProperty("greenhouseUnlocked");
-            rawValue = property?.GetValue(farm);
-        }
-
-        if (rawValue != null)
-        {
-            var valueProperty = rawValue.GetType().GetProperty("Value");
-
-            object? value = valueProperty?.GetValue(rawValue);
-
-            if (value is bool isUnlocked)
-                return isUnlocked;
-        }
-
-        return Game1.MasterPlayer.mailReceived.Contains("ccPantry")
-            || Game1.MasterPlayer.mailReceived.Contains("jojaPantry");
-    }
-
-    private int GetHouseUpgradeLevel()
-    {
-        var property = Game1.player.GetType()
-            .GetProperty("HouseUpgradeLevel");
-
-        object? value = property?.GetValue(Game1.player);
-
-        if (value is int level)
-            return level;
-
-        return 0;
-    }
-
-    private string GetBuildingTypeName(Building building)
-    {
-        return building.buildingType.Value ?? "";
-    }
-
-    private string NormalizeBuildingType(string buildingType)
-    {
-        return buildingType
-            .Replace(" ", "")
-            .Replace("_", "")
-            .Replace("-", "")
-            .ToLowerInvariant();
-    }
-
-    private bool IsTaxSettlementDay()
-    {
-        return Game1.dayOfMonth == 1
-            || Game1.dayOfMonth == 8
-            || Game1.dayOfMonth == 15
-            || Game1.dayOfMonth == 22;
-    }
-
-    private bool TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek)
-    {
-        previousWeek = new TaxWeekInfo();
-
-        if (Game1.dayOfMonth == 8)
-        {
-            previousWeek = new TaxWeekInfo
-            {
-                Year = Game1.year,
-                Season = Game1.currentSeason,
-                WeekNumber = 1,
-                StartDay = 1,
-                EndDay = 7
-            };
-
-            return true;
-        }
-
-        if (Game1.dayOfMonth == 15)
-        {
-            previousWeek = new TaxWeekInfo
-            {
-                Year = Game1.year,
-                Season = Game1.currentSeason,
-                WeekNumber = 2,
-                StartDay = 8,
-                EndDay = 14
-            };
-
-            return true;
-        }
-
-        if (Game1.dayOfMonth == 22)
-        {
-            previousWeek = new TaxWeekInfo
-            {
-                Year = Game1.year,
-                Season = Game1.currentSeason,
-                WeekNumber = 3,
-                StartDay = 15,
-                EndDay = 21
-            };
-
-            return true;
-        }
-
-        if (Game1.dayOfMonth == 1)
-        {
-            string previousSeason = this.GetPreviousSeason(Game1.currentSeason);
-            int previousYear = Game1.year;
-
-            if (Game1.currentSeason == "spring")
-                previousYear--;
-
-            if (previousYear <= 0)
-                return false;
-
-            previousWeek = new TaxWeekInfo
-            {
-                Year = previousYear,
-                Season = previousSeason,
-                WeekNumber = 4,
-                StartDay = 22,
-                EndDay = 28
-            };
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private bool HasTaxRecordForPeriod(
-        int year,
-        string season,
-        int startDay,
-        int endDay
-    )
-    {
-        return this.ledgerService.GetTaxRecords()
-            .Any(r =>
-                r.Year == year
-                && r.Season == season
-                && r.CoveredStartDay == startDay
-                && r.CoveredEndDay == endDay
-            );
-    }
-
-    private int GetTaxableShippingBinIncomeForPeriod(
-        int year,
-        string season,
-        int startDay,
-        int endDay
-    )
-    {
-        return this.ledgerService.GetEntries()
-            .Where(e =>
-                e.Type == "Income"
-                && e.Year == year
-                && e.Season == season
-                && e.Day >= startDay
-                && e.Day <= endDay
-                && this.IsShippingBinIncome(e)
-            )
-            .Sum(e => e.Amount);
-    }
-
-    private double GetIncomeTaxRateForAmount(int amount)
-    {
-        if (amount <= 5000)
-            return 0.00;
-
-        if (amount <= 20000)
-            return 0.05;
-
-        if (amount <= 50000)
-            return 0.08;
-
-        if (amount <= 100000)
-            return 0.12;
-
-        return 0.15;
-    }
-
-    private string GetIncomeTaxBracketLabelForAmount(int amount)
-    {
-        if (amount <= 5000)
-            return "0 - 5,000g: 0%";
-
-        if (amount <= 20000)
-            return "5,001 - 20,000g: 5%";
-
-        if (amount <= 50000)
-            return "20,001 - 50,000g: 8%";
-
-        if (amount <= 100000)
-            return "50,001 - 100,000g: 12%";
-
-        return "100,000g+: 15%";
-    }
-
-    private bool IsShippingBinIncome(LedgerEntry entry)
-    {
-        if (string.IsNullOrWhiteSpace(entry.Source))
-            return false;
-
-        string normalizedSource = entry.Source
-            .Replace(" ", "")
-            .Replace("_", "")
-            .Replace("-", "")
-            .ToLowerInvariant();
-
-        return normalizedSource == "shippingbin"
-            || normalizedSource.Contains("shippingbin");
-    }
-
-    private long GetTaxRecordSortKey(TaxRecord record)
-    {
-        int seasonIndex = this.GetSeasonIndex(record.SettlementSeason);
-
-        return
-            (record.SettlementYear * 10000L)
-            + (seasonIndex * 100L)
-            + record.SettlementDay;
-    }
-
-    private int GetSeasonIndex(string season)
-    {
-        return season switch
-        {
-            "spring" => 1,
-            "summer" => 2,
-            "fall" => 3,
-            "winter" => 4,
-            _ => 0
-        };
-    }
-
-    private string GetNextSeason(string season)
-    {
-        return season switch
-        {
-            "spring" => "summer",
-            "summer" => "fall",
-            "fall" => "winter",
-            "winter" => "spring",
-            _ => "spring"
-        };
-    }
-
-    private string GetPreviousSeason(string season)
-    {
-        return season switch
-        {
-            "spring" => "winter",
-            "summer" => "spring",
-            "fall" => "summer",
-            "winter" => "fall",
-            _ => "spring"
-        };
-    }
-
-    private string FormatSeason(string season)
-    {
-        return season switch
-        {
-            "spring" => "Spring",
-            "summer" => "Summer",
-            "fall" => "Fall",
-            "winter" => "Winter",
-            _ => season
-        };
-    }
-
-    private string FormatTaxAmount(int amount)
-    {
-        if (amount <= 0)
-            return "0g";
-
-        return $"-{amount}g";
-    }
-
-    private class BuildingPropertyTaxConfig
-    {
-        public double ReplacementCostAmount { get; set; }
-
-        public double IncomePotentialValueAmount { get; set; }
-
-        public double UtilityPremiumAmount { get; set; }
-
-        public double RiskShieldPremiumAmount { get; set; }
-    }
-
-    private class TaxWeekInfo
-    {
-        public int Year { get; set; }
-
-        public string Season { get; set; } = "";
-
-        public int WeekNumber { get; set; }
-
-        public int StartDay { get; set; }
-
-        public int EndDay { get; set; }
-    }
+   private const int StandardFarmTheoreticalTillableTiles = 3427;
+ 
+   private const double WeeklyAdministrativeFee = 50.0;
+   private const double WeeklyDocumentationFee = 10.0;
+ 
+   private const double DailyAdministrativeFee = WeeklyAdministrativeFee / 7.0;
+   private const double DailyDocumentationFee = WeeklyDocumentationFee / 7.0;
+ 
+   private const double MaxWeeklyAgriculturalDeduction = 1000.0;
+   private const double MaxDailyAgriculturalDeduction = MaxWeeklyAgriculturalDeduction / 7.0;
+ 
+   private const int KegDailyTax = 48;
+   private const int PreservesJarDailyTax = 64;
+   private const int CaskDailyTax = 8;
+   private const int BeeHouseDailyTax = 34;
+   private const int MayonnaiseMachineDailyTax = 260;
+   private const int CheesePressDailyTax = 51;
+   private const int LoomDailyTax = 26;
+   private const int OilMakerDailyTax = 88;
+   private const int DehydratorDailyTax = 380;
+   private const int FishSmokerDailyTax = 137;
+ 
+   private readonly LedgerService ledgerService;
+   private readonly IMonitor? monitor;
+ 
+   public TaxService(
+       LedgerService ledgerService,
+       IMonitor? monitor = null
+   )
+   {
+       this.ledgerService = ledgerService;
+       this.monitor = monitor;
+   }
+ 
+   public int GetCurrentTaxWeekNumber()
+   {
+       return ((Game1.dayOfMonth - 1) / 7) + 1;
+   }
+ 
+   public int GetCurrentTaxWeekStartDay()
+   {
+       return ((this.GetCurrentTaxWeekNumber() - 1) * 7) + 1;
+   }
+ 
+   public int GetCurrentTaxWeekEndDay()
+   {
+       return Math.Min(
+           this.GetCurrentTaxWeekStartDay() + 6,
+           28
+       );
+   }
+ 
+   public string GetCurrentTaxWeekLabel()
+   {
+       return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekStartDay()} - {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekEndDay()}";
+   }
+ 
+   public string GetNextTaxSettlementLabel()
+   {
+       int endDay = this.GetCurrentTaxWeekEndDay();
+ 
+       if (endDay < 28)
+       {
+           return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {endDay + 1} Morning";
+       }
+ 
+       string nextSeason = this.GetNextSeason(Game1.currentSeason);
+       int nextYear = Game1.year;
+ 
+       if (Game1.currentSeason == "winter")
+           nextYear++;
+ 
+       return $"Year {nextYear} {this.FormatSeason(nextSeason)} 1 Morning";
+   }
+ 
+   public int GetCurrentWeekTaxableShippingBinIncome()
+   {
+       int startDay = this.GetCurrentTaxWeekStartDay();
+       int currentDay = Game1.dayOfMonth;
+ 
+       return this.GetTaxableShippingBinIncomeForPeriod(
+           Game1.year,
+           Game1.currentSeason,
+           startDay,
+           currentDay
+       );
+   }
+ 
+   public double GetIncomeTaxRate()
+   {
+       int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
+ 
+       return this.GetIncomeTaxRateForAmount(taxableIncome);
+   }
+ 
+   public string GetIncomeTaxBracketLabel()
+   {
+       int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
+ 
+       return this.GetIncomeTaxBracketLabelForAmount(taxableIncome);
+   }
+ 
+   public int GetEstimatedIncomeTax()
+   {
+       int taxableIncome = this.GetCurrentWeekTaxableShippingBinIncome();
+       double taxRate = this.GetIncomeTaxRateForAmount(taxableIncome);
+ 
+       return (int)Math.Floor(
+           taxableIncome * taxRate
+       );
+   }
+ 
+   public int GetEstimatedPropertyTax()
+   {
+       return this.GetPropertyTaxAmountForPeriod(
+           Game1.year,
+           Game1.currentSeason,
+           this.GetCurrentTaxWeekStartDay(),
+           Game1.dayOfMonth
+       );
+   }
+ 
+   public int GetEstimatedBusinessPropertyTax()
+   {
+       return this.GetBusinessPropertyTaxAmountForPeriod(
+           Game1.year,
+           Game1.currentSeason,
+           this.GetCurrentTaxWeekStartDay(),
+           Game1.dayOfMonth
+       );
+   }
+ 
+   public int GetEstimatedTotalTaxDue()
+   {
+       return
+           this.GetEstimatedIncomeTax()
+           + this.GetEstimatedPropertyTax()
+           + this.GetEstimatedBusinessPropertyTax();
+   }
+ 
+   public void EnsureTodayPropertyTaxAssessment()
+   {
+       if (this.ledgerService.HasPropertyTaxDailyAssessment(
+           Game1.year,
+           Game1.currentSeason,
+           Game1.dayOfMonth
+       ))
+       {
+           return;
+       }
+ 
+       PropertyTaxDailyAssessment assessment =
+           this.CalculateTodayPropertyTaxAssessment();
+ 
+       this.ledgerService.AddPropertyTaxDailyAssessment(
+           assessment
+       );
+   }
+ 
+   public void EnsureTodayBusinessPropertyTaxAssessment()
+   {
+       if (this.ledgerService.HasBusinessPropertyTaxDailyAssessment(
+           Game1.year,
+           Game1.currentSeason,
+           Game1.dayOfMonth
+       ))
+       {
+           return;
+       }
+ 
+       BusinessPropertyTaxDailyAssessment assessment =
+           this.CalculateTodayBusinessPropertyTaxAssessment();
+ 
+       this.ledgerService.AddBusinessPropertyTaxDailyAssessment(
+           assessment
+       );
+   }
+ 
+   public PropertyTaxDailyAssessment CalculateTodayPropertyTaxAssessment()
+   {
+       double replacementCost = 0;
+       double incomePotentialValue = 0;
+       double utilityPremium = 0;
+       double riskShieldPremium = 0;
+ 
+       this.AddFarmhouseAssessment(
+           ref replacementCost
+       );
+ 
+       Farm farm = Game1.getFarm();
+ 
+       foreach (Building building in farm.buildings)
+       {
+           string buildingType = this.GetBuildingTypeName(building);
+ 
+           BuildingPropertyTaxConfig? config =
+               this.GetBuildingPropertyTaxConfig(buildingType);
+ 
+           if (config == null)
+               continue;
+ 
+           replacementCost += config.ReplacementCostAmount;
+           incomePotentialValue += config.IncomePotentialValueAmount;
+           utilityPremium += config.UtilityPremiumAmount;
+           riskShieldPremium += config.RiskShieldPremiumAmount;
+       }
+ 
+       if (this.IsGreenhouseUnlocked())
+       {
+           BuildingPropertyTaxConfig greenhouseConfig =
+               this.GetGreenhousePropertyTaxConfig();
+ 
+           replacementCost += greenhouseConfig.ReplacementCostAmount;
+           incomePotentialValue += greenhouseConfig.IncomePotentialValueAmount;
+           utilityPremium += greenhouseConfig.UtilityPremiumAmount;
+           riskShieldPremium += greenhouseConfig.RiskShieldPremiumAmount;
+       }
+ 
+       double depreciationFactor = this.GetDepreciationFactor();
+ 
+       double assessedPropertyValue =
+           (
+               replacementCost
+               + incomePotentialValue
+               + utilityPremium
+               + riskShieldPremium
+           )
+           * depreciationFactor;
+ 
+       double agriculturalDeduction =
+           this.GetTodayAgriculturalDeduction();
+ 
+       double taxablePropertyAmount = Math.Max(
+           0,
+           assessedPropertyValue - agriculturalDeduction
+       );
+ 
+       double totalPropertyTaxAmount =
+           taxablePropertyAmount
+           + DailyAdministrativeFee
+           + DailyDocumentationFee;
+ 
+       return new PropertyTaxDailyAssessment
+       {
+           Year = Game1.year,
+           Season = Game1.currentSeason,
+           Day = Game1.dayOfMonth,
+ 
+           ReplacementCostAmount = replacementCost,
+           IncomePotentialValueAmount = incomePotentialValue,
+           UtilityPremiumAmount = utilityPremium,
+           RiskShieldPremiumAmount = riskShieldPremium,
+           DepreciationFactor = depreciationFactor,
+           AgriculturalDeductionAmount = agriculturalDeduction,
+           AdministrativeFeeAmount = DailyAdministrativeFee,
+           DocumentationFeeAmount = DailyDocumentationFee,
+           TotalPropertyTaxAmount = totalPropertyTaxAmount
+       };
+   }
+ 
+   public BusinessPropertyTaxDailyAssessment CalculateTodayBusinessPropertyTaxAssessment()
+   {
+       var assessment = new BusinessPropertyTaxDailyAssessment
+       {
+           Year = Game1.year,
+           Season = Game1.currentSeason,
+           Day = Game1.dayOfMonth
+       };
+ 
+       var locationLogLines = new List<string>();
+ 
+       foreach (GameLocation location in this.GetBusinessPropertyTaxLocations())
+       {
+           int locationKegCount = 0;
+           int locationPreservesJarCount = 0;
+           int locationCaskCount = 0;
+           int locationBeeHouseCount = 0;
+           int locationMayonnaiseMachineCount = 0;
+           int locationCheesePressCount = 0;
+           int locationLoomCount = 0;
+           int locationOilMakerCount = 0;
+           int locationDehydratorCount = 0;
+           int locationFishSmokerCount = 0;
+ 
+           foreach (var pair in location.objects.Pairs)
+           {
+               if (pair.Value is not StardewValley.Object obj)
+                   continue;
+ 
+               string machineName = this.NormalizeObjectName(
+                   obj.Name
+               );
+ 
+               switch (machineName)
+               {
+                   case "keg":
+                       assessment.KegCount++;
+                       locationKegCount++;
+                       break;
+ 
+                   case "preservesjar":
+                       assessment.PreservesJarCount++;
+                       locationPreservesJarCount++;
+                       break;
+ 
+                   case "cask":
+                       assessment.CaskCount++;
+                       locationCaskCount++;
+                       break;
+ 
+                   case "beehouse":
+                       assessment.BeeHouseCount++;
+                       locationBeeHouseCount++;
+                       break;
+ 
+                   case "mayonnaisemachine":
+                       assessment.MayonnaiseMachineCount++;
+                       locationMayonnaiseMachineCount++;
+                       break;
+ 
+                   case "cheesepress":
+                       assessment.CheesePressCount++;
+                       locationCheesePressCount++;
+                       break;
+ 
+                   case "loom":
+                       assessment.LoomCount++;
+                       locationLoomCount++;
+                       break;
+ 
+                   case "oilmaker":
+                       assessment.OilMakerCount++;
+                       locationOilMakerCount++;
+                       break;
+ 
+                   case "dehydrator":
+                       assessment.DehydratorCount++;
+                       locationDehydratorCount++;
+                       break;
+ 
+                   case "fishsmoker":
+                       assessment.FishSmokerCount++;
+                       locationFishSmokerCount++;
+                       break;
+               }
+           }
+ 
+           int locationTotal =
+               locationKegCount
+               + locationPreservesJarCount
+               + locationCaskCount
+               + locationBeeHouseCount
+               + locationMayonnaiseMachineCount
+               + locationCheesePressCount
+               + locationLoomCount
+               + locationOilMakerCount
+               + locationDehydratorCount
+               + locationFishSmokerCount;
+ 
+           if (locationTotal > 0)
+           {
+               locationLogLines.Add(
+                   $"{location.NameOrUniqueName}: " +
+                   $"Keg {locationKegCount}, " +
+                   $"Jar {locationPreservesJarCount}, " +
+                   $"Cask {locationCaskCount}, " +
+                   $"Bee {locationBeeHouseCount}, " +
+                   $"Mayo {locationMayonnaiseMachineCount}, " +
+                   $"Cheese {locationCheesePressCount}, " +
+                   $"Loom {locationLoomCount}, " +
+                   $"Oil {locationOilMakerCount}, " +
+                   $"Dehydrator {locationDehydratorCount}, " +
+                   $"Smoker {locationFishSmokerCount}"
+               );
+           }
+       }
+ 
+       assessment.TotalBusinessPropertyTaxAmount =
+           this.GetTaxableBusinessPropertyCount(assessment.KegCount) * KegDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount) * PreservesJarDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.CaskCount) * CaskDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount) * BeeHouseDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount) * MayonnaiseMachineDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount) * CheesePressDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.LoomCount) * LoomDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount) * OilMakerDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount) * DehydratorDailyTax
+           + this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount) * FishSmokerDailyTax;
+ 
+       this.LogBusinessPropertyTaxScan(
+           assessment,
+           locationLogLines
+       );
+ 
+       return assessment;
+   }
+ 
+   public bool TrySettlePreviousTaxWeek(out string message)
+   {
+       message = "";
+ 
+       if (!this.IsTaxSettlementDay())
+           return false;
+ 
+       if (!this.TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek))
+           return false;
+ 
+       if (this.HasTaxRecordForPeriod(
+           previousWeek.Year,
+           previousWeek.Season,
+           previousWeek.StartDay,
+           previousWeek.EndDay
+       ))
+       {
+           message =
+               $"Tax settlement skipped: record already exists for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
+ 
+           return false;
+       }
+ 
+       int taxableShippingBinIncome = this.GetTaxableShippingBinIncomeForPeriod(
+           previousWeek.Year,
+           previousWeek.Season,
+           previousWeek.StartDay,
+           previousWeek.EndDay
+       );
+ 
+       double incomeTaxRate = this.GetIncomeTaxRateForAmount(
+           taxableShippingBinIncome
+       );
+ 
+       int incomeTaxAmount = (int)Math.Floor(
+           taxableShippingBinIncome * incomeTaxRate
+       );
+ 
+       int propertyTaxAmount = this.GetPropertyTaxAmountForPeriod(
+           previousWeek.Year,
+           previousWeek.Season,
+           previousWeek.StartDay,
+           previousWeek.EndDay
+       );
+ 
+       int businessPropertyTaxAmount = this.GetBusinessPropertyTaxAmountForPeriod(
+           previousWeek.Year,
+           previousWeek.Season,
+           previousWeek.StartDay,
+           previousWeek.EndDay
+       );
+ 
+       int totalTaxAmount =
+           incomeTaxAmount
+           + propertyTaxAmount
+           + businessPropertyTaxAmount;
+ 
+       if (totalTaxAmount <= 0)
+       {
+           message =
+               $"No tax due for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
+ 
+           return false;
+       }
+ 
+       if (incomeTaxAmount > 0)
+       {
+           this.ledgerService.ChargeObligation(
+               "Reality Check",
+               "Income Tax",
+               incomeTaxAmount
+           );
+       }
+ 
+       if (propertyTaxAmount > 0)
+       {
+           this.ledgerService.ChargeObligation(
+               "Reality Check",
+               "Property Tax",
+               propertyTaxAmount
+           );
+       }
+ 
+       if (businessPropertyTaxAmount > 0)
+       {
+           this.ledgerService.ChargeObligation(
+               "Reality Check",
+               "Business Property Tax",
+               businessPropertyTaxAmount
+           );
+       }
+ 
+       var record = new TaxRecord
+       {
+           Year = previousWeek.Year,
+           Season = previousWeek.Season,
+           WeekNumber = previousWeek.WeekNumber,
+           CoveredStartDay = previousWeek.StartDay,
+           CoveredEndDay = previousWeek.EndDay,
+ 
+           SettlementYear = Game1.year,
+           SettlementSeason = Game1.currentSeason,
+           SettlementDay = Game1.dayOfMonth,
+ 
+           TaxableShippingBinIncome = taxableShippingBinIncome,
+           IncomeTaxRate = incomeTaxRate,
+ 
+           IncomeTaxAmount = incomeTaxAmount,
+           PropertyTaxAmount = propertyTaxAmount,
+           BusinessPropertyTaxAmount = businessPropertyTaxAmount,
+ 
+           TotalTaxAmount = totalTaxAmount
+       };
+ 
+       this.ledgerService.AddTaxRecord(record);
+ 
+       message =
+           $"Weekly tax settled: {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}, total -{totalTaxAmount}g.";
+ 
+       return true;
+   }
+ 
+   public List<TaxRecord> GetRecentTaxRecords(int maxRecords = 16)
+   {
+       return this.ledgerService.GetTaxRecords()
+           .OrderByDescending(r => this.GetTaxRecordSortKey(r))
+           .Take(maxRecords)
+           .OrderBy(r => this.GetTaxRecordSortKey(r))
+           .ToList();
+   }
+ 
+   public string GetTaxRecordSummaryLine(TaxRecord record)
+   {
+       string coveredPeriod =
+           $"Y{record.Year} {this.FormatSeason(record.Season)} {record.CoveredStartDay}-{record.CoveredEndDay}";
+ 
+       string settlementDate =
+           $"Y{record.SettlementYear} {this.FormatSeason(record.SettlementSeason)} {record.SettlementDay}";
+ 
+       return
+           $"{coveredPeriod} -> {settlementDate}: " +
+           $"Income {this.FormatTaxAmount(record.IncomeTaxAmount)} | " +
+           $"Property {this.FormatTaxAmount(record.PropertyTaxAmount)} | " +
+           $"Business {this.FormatTaxAmount(record.BusinessPropertyTaxAmount)}";
+   }
+ 
+   public void AddTaxRecord(TaxRecord record)
+   {
+       this.ledgerService.AddTaxRecord(record);
+   }
+ 
+   public string FormatTaxRatePercent(double rate)
+   {
+       int percent = (int)Math.Round(rate * 100);
+ 
+       return $"{percent}%";
+   }
+ 
+   private int GetPropertyTaxAmountForPeriod(
+       int year,
+       string season,
+       int startDay,
+       int endDay
+   )
+   {
+       double total = this.ledgerService.GetPropertyTaxDailyAssessments()
+           .Where(a =>
+               a.Year == year
+               && a.Season == season
+               && a.Day >= startDay
+               && a.Day <= endDay
+           )
+           .Sum(a => a.TotalPropertyTaxAmount);
+ 
+       return (int)Math.Round(
+           total,
+           MidpointRounding.AwayFromZero
+       );
+   }
+ 
+   private int GetBusinessPropertyTaxAmountForPeriod(
+       int year,
+       string season,
+       int startDay,
+       int endDay
+   )
+   {
+       return this.ledgerService.GetBusinessPropertyTaxDailyAssessments()
+           .Where(a =>
+               a.Year == year
+               && a.Season == season
+               && a.Day >= startDay
+               && a.Day <= endDay
+           )
+           .Sum(a => a.TotalBusinessPropertyTaxAmount);
+   }
+ 
+   private List<GameLocation> GetBusinessPropertyTaxLocations()
+   {
+       var result = new List<GameLocation>();
+       var seen = new HashSet<GameLocation>();
+ 
+       void AddLocation(GameLocation? location)
+       {
+           if (location == null)
+               return;
+ 
+           if (!this.ShouldIncludeBusinessPropertyTaxLocation(location))
+               return;
+ 
+           if (seen.Add(location))
+               result.Add(location);
+       }
+ 
+       foreach (GameLocation location in Game1.locations)
+       {
+           AddLocation(location);
+       }
+ 
+       Farm farm = Game1.getFarm();
+ 
+       foreach (Building building in farm.buildings)
+       {
+           AddLocation(building.GetIndoors());
+       }
+ 
+       return result;
+   }
+ 
+   private bool ShouldIncludeBusinessPropertyTaxLocation(GameLocation location)
+   {
+       string locationName = location.NameOrUniqueName ?? location.Name ?? "";
+ 
+       string normalizedName = locationName
+           .Replace(" ", "")
+           .Replace("_", "")
+           .Replace("-", "")
+           .ToLowerInvariant();
+ 
+       if (normalizedName.StartsWith("cellar"))
+       {
+           if (normalizedName == "cellar")
+               return this.GetHouseUpgradeLevel() >= 3;
+ 
+           return false;
+       }
+ 
+       return true;
+   }
+ 
+   private int GetTaxableBusinessPropertyCount(int count)
+   {
+       if (count <= 20)
+           return 0;
+ 
+       return count;
+   }
+ 
+   private void LogBusinessPropertyTaxScan(
+       BusinessPropertyTaxDailyAssessment assessment,
+       List<string> locationLogLines
+   )
+   {
+       if (this.monitor == null)
+           return;
+ 
+       this.monitor.Log(
+           "=== Reality Check Business Property Tax Scan ===",
+           LogLevel.Info
+       );
+ 
+       this.monitor.Log(
+           $"Date: Year {assessment.Year} {assessment.Season} {assessment.Day}",
+           LogLevel.Info
+       );
+ 
+       if (locationLogLines.Count == 0)
+       {
+           this.monitor.Log(
+               "No taxable business machines found in scanned locations.",
+               LogLevel.Info
+           );
+       }
+       else
+       {
+           foreach (string line in locationLogLines)
+           {
+               this.monitor.Log(
+                   line,
+                   LogLevel.Info
+               );
+           }
+       }
+ 
+       this.monitor.Log(
+           "Totals: " +
+           $"Keg {assessment.KegCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.KegCount)}, " +
+           $"Jar {assessment.PreservesJarCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount)}, " +
+           $"Cask {assessment.CaskCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CaskCount)}, " +
+           $"Bee {assessment.BeeHouseCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount)}, " +
+           $"Mayo {assessment.MayonnaiseMachineCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount)}, " +
+           $"Cheese {assessment.CheesePressCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount)}, " +
+           $"Loom {assessment.LoomCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.LoomCount)}, " +
+           $"Oil {assessment.OilMakerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount)}, " +
+           $"Dehydrator {assessment.DehydratorCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount)}, " +
+           $"Smoker {assessment.FishSmokerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount)}",
+           LogLevel.Info
+       );
+ 
+       this.monitor.Log(
+           $"Business Property Tax Total Today: {assessment.TotalBusinessPropertyTaxAmount}g",
+           LogLevel.Info
+       );
+ 
+       this.monitor.Log(
+           "==============================================",
+           LogLevel.Info
+       );
+   }
+ 
+   private void AddFarmhouseAssessment(
+       ref double replacementCost
+   )
+   {
+       int houseUpgradeLevel = this.GetHouseUpgradeLevel();
+ 
+       if (houseUpgradeLevel <= 0)
+           return;
+ 
+       if (houseUpgradeLevel == 1)
+       {
+           replacementCost += 10000.0 / 80.0 / 7.0;
+           return;
+       }
+ 
+       if (houseUpgradeLevel == 2)
+       {
+           replacementCost += 75000.0 / 80.0 / 7.0;
+           return;
+       }
+ 
+       replacementCost += 175000.0 / 80.0 / 7.0;
+   }
+ 
+   private BuildingPropertyTaxConfig? GetBuildingPropertyTaxConfig(
+       string buildingType
+   )
+   {
+       string key = this.NormalizeBuildingType(buildingType);
+ 
+       return key switch
+       {
+           "coop" => this.CreateConfig(
+               replacementCost: 4000.0 / 80.0 / 7.0,
+               incomePotentialValue: 4.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "bigcoop" => this.CreateConfig(
+               replacementCost: 14000.0 / 80.0 / 7.0,
+               incomePotentialValue: 8.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "deluxecoop" => this.CreateConfig(
+               replacementCost: 34000.0 / 80.0 / 7.0,
+               incomePotentialValue: 12.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "barn" => this.CreateConfig(
+               replacementCost: 6000.0 / 80.0 / 7.0,
+               incomePotentialValue: 4.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "bigbarn" => this.CreateConfig(
+               replacementCost: 18000.0 / 80.0 / 7.0,
+               incomePotentialValue: 8.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "deluxebarn" => this.CreateConfig(
+               replacementCost: 43000.0 / 80.0 / 7.0,
+               incomePotentialValue: 12.0 * 175.0 / 7.0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "fishpond" => this.CreateUtilityConfig(
+               5000.0
+           ),
+ 
+           "mill" => this.CreateUtilityConfig(
+               2500.0
+           ),
+ 
+           "shed" => this.CreateUtilityConfig(
+               15000.0
+           ),
+ 
+           "bigshed" => this.CreateUtilityConfig(
+               35000.0
+           ),
+ 
+           "silo" => this.CreateUtilityConfig(
+               100.0
+           ),
+ 
+           "slimehutch" => this.CreateUtilityConfig(
+               10000.0
+           ),
+ 
+           "stable" => this.CreateUtilityConfig(
+               10000.0
+           ),
+ 
+           "well" => this.CreateUtilityConfig(
+               1000.0
+           ),
+ 
+           "cabin" => this.CreateConfig(
+               replacementCost: 100.0 / 80.0 / 7.0,
+               incomePotentialValue: 0,
+               utilityPremium: 0,
+               riskShieldPremium: 0
+           ),
+ 
+           "shippingbin" => this.CreateUtilityConfig(
+               250.0
+           ),
+ 
+           "petbowl" => this.CreateUtilityConfig(
+               5000.0
+           ),
+ 
+           "earthobelisk" => this.CreateUtilityConfig(
+               500000.0
+           ),
+ 
+           "waterobelisk" => this.CreateUtilityConfig(
+               500000.0
+           ),
+ 
+           "desertobelisk" => this.CreateUtilityConfig(
+               1000000.0
+           ),
+ 
+           "islandobelisk" => this.CreateUtilityConfig(
+               1000000.0
+           ),
+ 
+           "junimohut" => this.CreateUtilityConfig(
+               20000.0
+           ),
+ 
+           "goldclock" => this.CreateUtilityConfig(
+               10000000.0
+           ),
+ 
+           _ => null
+       };
+   }
+ 
+   private BuildingPropertyTaxConfig GetGreenhousePropertyTaxConfig()
+   {
+       double replacementCost = 35000.0 / 80.0 / 7.0;
+       double incomePotentialValue = 120.0 * 13.125 / 7.0;
+       double riskShieldPremium = incomePotentialValue * 2.0;
+ 
+       return this.CreateConfig(
+           replacementCost: replacementCost,
+           incomePotentialValue: incomePotentialValue,
+           utilityPremium: 0,
+           riskShieldPremium: riskShieldPremium
+       );
+   }
+ 
+   private BuildingPropertyTaxConfig CreateUtilityConfig(
+       double constructionCost
+   )
+   {
+       double replacementCost = constructionCost / 80.0 / 7.0;
+       double utilityPremium = replacementCost * 0.2;
+ 
+       return this.CreateConfig(
+           replacementCost: replacementCost,
+           incomePotentialValue: 0,
+           utilityPremium: utilityPremium,
+           riskShieldPremium: 0
+       );
+   }
+ 
+   private BuildingPropertyTaxConfig CreateConfig(
+       double replacementCost,
+       double incomePotentialValue,
+       double utilityPremium,
+       double riskShieldPremium
+   )
+   {
+       return new BuildingPropertyTaxConfig
+       {
+           ReplacementCostAmount = replacementCost,
+           IncomePotentialValueAmount = incomePotentialValue,
+           UtilityPremiumAmount = utilityPremium,
+           RiskShieldPremiumAmount = riskShieldPremium
+       };
+   }
+ 
+   private double GetDepreciationFactor()
+   {
+       return Game1.year switch
+       {
+           <= 1 => 1.00,
+           2 => 0.95,
+           3 => 0.90,
+           4 => 0.85,
+           _ => 0.80
+       };
+   }
+ 
+   private double GetTodayAgriculturalDeduction()
+   {
+       int plantedOutdoorTiles = this.CountOutdoorPlantedTiles();
+ 
+       double plantingRatio = plantedOutdoorTiles
+           / (double)StandardFarmTheoreticalTillableTiles;
+ 
+       plantingRatio = Math.Clamp(
+           plantingRatio,
+           0,
+           1
+       );
+ 
+       return MaxDailyAgriculturalDeduction * plantingRatio;
+   }
+ 
+   private int CountOutdoorPlantedTiles()
+   {
+       Farm farm = Game1.getFarm();
+ 
+       int count = 0;
+ 
+       foreach (var pair in farm.terrainFeatures.Pairs)
+       {
+           if (pair.Value is HoeDirt dirt && dirt.crop != null)
+               count++;
+       }
+ 
+       return count;
+   }
+ 
+   private bool IsGreenhouseUnlocked()
+   {
+       Farm farm = Game1.getFarm();
+ 
+       var field = farm.GetType().GetField("greenhouseUnlocked");
+ 
+       object? rawValue = field?.GetValue(farm);
+ 
+       if (rawValue == null)
+       {
+           var property = farm.GetType().GetProperty("greenhouseUnlocked");
+           rawValue = property?.GetValue(farm);
+       }
+ 
+       if (rawValue != null)
+       {
+           var valueProperty = rawValue.GetType().GetProperty("Value");
+ 
+           object? value = valueProperty?.GetValue(rawValue);
+ 
+           if (value is bool isUnlocked)
+               return isUnlocked;
+       }
+ 
+       return Game1.MasterPlayer.mailReceived.Contains("ccPantry")
+           || Game1.MasterPlayer.mailReceived.Contains("jojaPantry");
+   }
+ 
+   private int GetHouseUpgradeLevel()
+   {
+       var property = Game1.player.GetType()
+           .GetProperty("HouseUpgradeLevel");
+ 
+       object? value = property?.GetValue(Game1.player);
+ 
+       if (value is int level)
+           return level;
+ 
+       return 0;
+   }
+ 
+   private string GetBuildingTypeName(Building building)
+   {
+       return building.buildingType.Value ?? "";
+   }
+ 
+   private string NormalizeBuildingType(string buildingType)
+   {
+       return buildingType
+           .Replace(" ", "")
+           .Replace("_", "")
+           .Replace("-", "")
+           .ToLowerInvariant();
+   }
+ 
+   private string NormalizeObjectName(string objectName)
+   {
+       return objectName
+           .Replace(" ", "")
+           .Replace("_", "")
+           .Replace("-", "")
+           .ToLowerInvariant();
+   }
+ 
+   private bool IsTaxSettlementDay()
+   {
+       return Game1.dayOfMonth == 1
+           || Game1.dayOfMonth == 8
+           || Game1.dayOfMonth == 15
+           || Game1.dayOfMonth == 22;
+   }
+ 
+   private bool TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek)
+   {
+       previousWeek = new TaxWeekInfo();
+ 
+       if (Game1.dayOfMonth == 8)
+       {
+           previousWeek = new TaxWeekInfo
+           {
+               Year = Game1.year,
+               Season = Game1.currentSeason,
+               WeekNumber = 1,
+               StartDay = 1,
+               EndDay = 7
+           };
+ 
+           return true;
+       }
+ 
+       if (Game1.dayOfMonth == 15)
+       {
+           previousWeek = new TaxWeekInfo
+           {
+               Year = Game1.year,
+               Season = Game1.currentSeason,
+               WeekNumber = 2,
+               StartDay = 8,
+               EndDay = 14
+           };
+ 
+           return true;
+       }
+ 
+       if (Game1.dayOfMonth == 22)
+       {
+           previousWeek = new TaxWeekInfo
+           {
+               Year = Game1.year,
+               Season = Game1.currentSeason,
+               WeekNumber = 3,
+               StartDay = 15,
+               EndDay = 21
+           };
+ 
+           return true;
+       }
+ 
+       if (Game1.dayOfMonth == 1)
+       {
+           string previousSeason = this.GetPreviousSeason(Game1.currentSeason);
+           int previousYear = Game1.year;
+ 
+           if (Game1.currentSeason == "spring")
+               previousYear--;
+ 
+           if (previousYear <= 0)
+               return false;
+ 
+           previousWeek = new TaxWeekInfo
+           {
+               Year = previousYear,
+               Season = previousSeason,
+               WeekNumber = 4,
+               StartDay = 22,
+               EndDay = 28
+           };
+ 
+           return true;
+       }
+ 
+       return false;
+   }
+ 
+   private bool HasTaxRecordForPeriod(
+       int year,
+       string season,
+       int startDay,
+       int endDay
+   )
+   {
+       return this.ledgerService.GetTaxRecords()
+           .Any(r =>
+               r.Year == year
+               && r.Season == season
+               && r.CoveredStartDay == startDay
+               && r.CoveredEndDay == endDay
+           );
+   }
+ 
+   private int GetTaxableShippingBinIncomeForPeriod(
+       int year,
+       string season,
+       int startDay,
+       int endDay
+   )
+   {
+       return this.ledgerService.GetEntries()
+           .Where(e =>
+               e.Type == "Income"
+               && e.Year == year
+               && e.Season == season
+               && e.Day >= startDay
+               && e.Day <= endDay
+               && this.IsShippingBinIncome(e)
+           )
+           .Sum(e => e.Amount);
+   }
+ 
+   private double GetIncomeTaxRateForAmount(int amount)
+   {
+       if (amount <= 5000)
+           return 0.00;
+ 
+       if (amount <= 20000)
+           return 0.05;
+ 
+       if (amount <= 50000)
+           return 0.08;
+ 
+       if (amount <= 100000)
+           return 0.12;
+ 
+       return 0.15;
+   }
+ 
+   private string GetIncomeTaxBracketLabelForAmount(int amount)
+   {
+       if (amount <= 5000)
+           return "0 - 5,000g: 0%";
+ 
+       if (amount <= 20000)
+           return "5,001 - 20,000g: 5%";
+ 
+       if (amount <= 50000)
+           return "20,001 - 50,000g: 8%";
+ 
+       if (amount <= 100000)
+           return "50,001 - 100,000g: 12%";
+ 
+       return "100,000g+: 15%";
+   }
+ 
+   private bool IsShippingBinIncome(LedgerEntry entry)
+   {
+       if (string.IsNullOrWhiteSpace(entry.Source))
+           return false;
+ 
+       string normalizedSource = entry.Source
+           .Replace(" ", "")
+           .Replace("_", "")
+           .Replace("-", "")
+           .ToLowerInvariant();
+ 
+       return normalizedSource == "shippingbin"
+           || normalizedSource.Contains("shippingbin");
+   }
+ 
+   private long GetTaxRecordSortKey(TaxRecord record)
+   {
+       int seasonIndex = this.GetSeasonIndex(record.SettlementSeason);
+ 
+       return
+           (record.SettlementYear * 10000L)
+           + (seasonIndex * 100L)
+           + record.SettlementDay;
+   }
+ 
+   private int GetSeasonIndex(string season)
+   {
+       return season switch
+       {
+           "spring" => 1,
+           "summer" => 2,
+           "fall" => 3,
+           "winter" => 4,
+           _ => 0
+       };
+   }
+ 
+   private string GetNextSeason(string season)
+   {
+       return season switch
+       {
+           "spring" => "summer",
+           "summer" => "fall",
+           "fall" => "winter",
+           "winter" => "spring",
+           _ => "spring"
+       };
+   }
+ 
+   private string GetPreviousSeason(string season)
+   {
+       return season switch
+       {
+           "spring" => "winter",
+           "summer" => "spring",
+           "fall" => "summer",
+           "winter" => "fall",
+           _ => "spring"
+       };
+   }
+ 
+   private string FormatSeason(string season)
+   {
+       return season switch
+       {
+           "spring" => "Spring",
+           "summer" => "Summer",
+           "fall" => "Fall",
+           "winter" => "Winter",
+           _ => season
+       };
+   }
+ 
+   private string FormatTaxAmount(int amount)
+   {
+       if (amount <= 0)
+           return "0g";
+ 
+       return $"-{amount}g";
+   }
+ 
+   private class BuildingPropertyTaxConfig
+   {
+       public double ReplacementCostAmount { get; set; }
+ 
+       public double IncomePotentialValueAmount { get; set; }
+ 
+       public double UtilityPremiumAmount { get; set; }
+ 
+       public double RiskShieldPremiumAmount { get; set; }
+   }
+ 
+   private class TaxWeekInfo
+   {
+       public int Year { get; set; }
+ 
+       public string Season { get; set; } = "";
+ 
+       public int WeekNumber { get; set; }
+ 
+       public int StartDay { get; set; }
+ 
+       public int EndDay { get; set; }
+   }
 }

@@ -38,6 +38,7 @@ public class LedgerService
         this.data.Ledger ??= new List<LedgerEntry>();
         this.data.TaxRecords ??= new List<TaxRecord>();
         this.data.PropertyTaxDailyAssessments ??= new List<PropertyTaxDailyAssessment>();
+        this.data.BusinessPropertyTaxDailyAssessments ??= new List<BusinessPropertyTaxDailyAssessment>();
 
         this.monitor.Log(
             "Ledger loaded from JSON.",
@@ -60,6 +61,11 @@ public class LedgerService
         return this.data.PropertyTaxDailyAssessments;
     }
 
+    public List<BusinessPropertyTaxDailyAssessment> GetBusinessPropertyTaxDailyAssessments()
+    {
+        return this.data.BusinessPropertyTaxDailyAssessments;
+    }
+
     public bool HasPropertyTaxDailyAssessment(
         int year,
         string season,
@@ -67,6 +73,19 @@ public class LedgerService
     )
     {
         return this.data.PropertyTaxDailyAssessments.Any(a =>
+            a.Year == year
+            && a.Season == season
+            && a.Day == day
+        );
+    }
+
+    public bool HasBusinessPropertyTaxDailyAssessment(
+        int year,
+        string season,
+        int day
+    )
+    {
+        return this.data.BusinessPropertyTaxDailyAssessments.Any(a =>
             a.Year == year
             && a.Season == season
             && a.Day == day
@@ -90,6 +109,27 @@ public class LedgerService
 
         this.monitor.Log(
             $"Property Tax daily assessment added: Year {assessment.Year} {assessment.Season} {assessment.Day}, total {assessment.TotalPropertyTaxAmount:0.##}g",
+            LogLevel.Trace
+        );
+    }
+
+    public void AddBusinessPropertyTaxDailyAssessment(
+        BusinessPropertyTaxDailyAssessment assessment
+    )
+    {
+        if (this.HasBusinessPropertyTaxDailyAssessment(
+            assessment.Year,
+            assessment.Season,
+            assessment.Day
+        ))
+        {
+            return;
+        }
+
+        this.data.BusinessPropertyTaxDailyAssessments.Add(assessment);
+
+        this.monitor.Log(
+            $"Business Property Tax daily assessment added: Year {assessment.Year} {assessment.Season} {assessment.Day}, total {assessment.TotalBusinessPropertyTaxAmount}g",
             LogLevel.Trace
         );
     }
@@ -320,13 +360,14 @@ public class LedgerService
         this.data.Ledger.Clear();
         this.data.TaxRecords.Clear();
         this.data.PropertyTaxDailyAssessments.Clear();
+        this.data.BusinessPropertyTaxDailyAssessments.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger, tax records, property tax assessments, and outstanding balance cleared.",
+            "Ledger, tax records, tax assessments, and outstanding balance cleared.",
             LogLevel.Info
         );
     }

@@ -1,0 +1,10 @@
+{
+  "Name": "Reality Check",
+  "Author": "Stan",
+  "Version": "0.5.0",
+  "Description": "A financial reality check for your farm.",
+  "UniqueID": "Stan.RealityCheck",
+  "EntryDll": "RealityCheck.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

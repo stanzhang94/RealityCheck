@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "YE8pMl08foc=",
+  "success": true,
+  "projectFilePath": "/Users/stan/code/RealityCheck/RealityCheck.csproj",
+  "expectedPackageFiles": [
+    "/Users/stan/.nuget/packages/pathoschild.stardew.modbuildconfig/4.3.0/pathoschild.stardew.modbuildconfig.4.3.0.nupkg.sha512",
+    "/Users/stan/.nuget/packages/microsoft.netcore.app.ref/6.0.36/microsoft.netcore.app.ref.6.0.36.nupkg.sha512",
+    "/Users/stan/.nuget/packages/microsoft.aspnetcore.app.ref/6.0.36/microsoft.aspnetcore.app.ref.6.0.36.nupkg.sha512"
+  ],
+  "logs": []
+}

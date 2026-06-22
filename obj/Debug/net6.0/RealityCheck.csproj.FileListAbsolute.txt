@@ -1,0 +1,8 @@
+/Users/stan/code/RealityCheck/bin/Debug/net6.0/RealityCheck.deps.json
+/Users/stan/code/RealityCheck/bin/Debug/net6.0/RealityCheck.dll
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.csproj.AssemblyReference.cache
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.GeneratedMSBuildEditorConfig.editorconfig
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.AssemblyInfoInputs.cache
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.AssemblyInfo.cs
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.csproj.CoreCompileInputs.cache
+/Users/stan/code/RealityCheck/obj/Debug/net6.0/RealityCheck.dll

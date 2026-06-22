@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using RealityCheck.Models;
 using RealityCheck.Services;
 using StardewValley;
-using StardewValley.Menus;
 using StardewValley.ItemTypeDefinitions;
+using StardewValley.Menus;
 
 namespace RealityCheck.UI;
 
@@ -26,6 +30,7 @@ public class FinanceMenu : IClickableMenu
     private readonly Rectangle dailyTab;
     private readonly Rectangle seasonalTab;
     private readonly Rectangle annualTab;
+
     private readonly Color chartColor = new Color(92, 63, 34);
 
     private enum ReportTab
@@ -235,33 +240,23 @@ public class FinanceMenu : IClickableMenu
         y += 45;
 
         this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Today's Expenses: {this.analyticsService.GetTodayExpense()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Today's Net: {this.analyticsService.GetTodayNet()}g", x, y);
         y += 55;
 
-        this.DrawLine(b, "Items Sold Today", x, y);
-        y += 45;
-
-        var items = this.analyticsService.GetTodayItemSummaries();
-
-        if (items.Count == 0)
-        {
-            this.DrawLine(b, "No sales recorded today.", x, y);
-
-            this.UpdateContentHeight(y + 50);
-
-            return;
-        }
-
-foreach (var item in items)
-{
-    this.DrawItemSummaryLine(
-        b,
-        item,
-        x,
-        y
-    );
-
-    y += 38;
-}
+        y = this.DrawItemAndExpenseColumns(
+            b,
+            "Items Sold Today",
+            this.analyticsService.GetTodayItemSummaries(),
+            "Expense Breakdown",
+            this.analyticsService.GetTodayExpenseBreakdown(),
+            x,
+            y
+        );
 
         this.UpdateContentHeight(y + 50);
     }
@@ -272,353 +267,450 @@ foreach (var item in items)
         y += 45;
 
         this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Seasonal Expenses: {this.analyticsService.GetSeasonExpense()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Seasonal Net: {this.analyticsService.GetSeasonNet()}g", x, y);
         y += 55;
 
-        this.DrawLine(b, "Items Sold This Season", x, y);
+        y = this.DrawItemAndExpenseColumns(
+            b,
+            "Items Sold This Season",
+            this.analyticsService.GetSeasonItemSummaries(),
+            "Expense Breakdown",
+            this.analyticsService.GetSeasonExpenseBreakdown(),
+            x,
+            y
+        );
+
+        this.DrawLine(b, "Income Trend", x, y);
+        y += 50;
+
+        var incomeTrend = this.analyticsService.GetSeasonDailyIncome();
+
+        this.DrawSeasonTrendChart(
+            b,
+            incomeTrend,
+            x,
+            y
+        );
+
+        y += 330;
+
+        this.DrawLine(b, "Expense Trend", x, y);
+        y += 50;
+
+        var expenseTrend = this.analyticsService.GetSeasonDailyExpense();
+
+        this.DrawSeasonTrendChart(
+            b,
+            expenseTrend,
+            x,
+            y
+        );
+
+        y += 330;
+
+        y = this.DrawDailyIncomeAndExpenseDetails(
+            b,
+            this.analyticsService.GetSeasonDailyIncomeDetailsToDate(),
+            this.analyticsService.GetSeasonDailyExpenseDetailsToDate(),
+            x,
+            y
+        );
+
+        this.UpdateContentHeight(y + 150);
+    }
+
+    private void DrawAnnualReport(SpriteBatch b, int x, int y)
+    {
+        this.DrawLine(b, $"Year: {Game1.year}", x, y);
         y += 45;
 
-        var items = this.analyticsService.GetSeasonItemSummaries();
+        this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Annual Expenses: {this.analyticsService.GetYearExpense()}g", x, y);
+        y += 35;
+
+        this.DrawLine(b, $"Annual Net: {this.analyticsService.GetYearNet()}g", x, y);
+        y += 55;
+
+        y = this.DrawItemAndExpenseColumns(
+            b,
+            "Items Sold This Year",
+            this.analyticsService.GetYearItemSummaries(),
+            "Expense Breakdown",
+            this.analyticsService.GetYearExpenseBreakdown(),
+            x,
+            y
+        );
+
+        this.DrawLine(b, "Income Trend", x, y);
+        y += 50;
+
+        var incomeTrend = this.analyticsService.GetYearDailyIncome();
+
+        this.DrawAnnualTrendChart(
+            b,
+            incomeTrend,
+            x,
+            y
+        );
+
+        y += 360;
+
+        this.DrawLine(b, "Expense Trend", x, y);
+        y += 50;
+
+        var expenseTrend = this.analyticsService.GetYearDailyExpense();
+
+        this.DrawAnnualTrendChart(
+            b,
+            expenseTrend,
+            x,
+            y
+        );
+
+        y += 360;
+
+        y = this.DrawDailyIncomeAndExpenseDetails(
+            b,
+            this.analyticsService.GetYearDailyIncomeDetailsToDate(),
+            this.analyticsService.GetYearDailyExpenseDetailsToDate(),
+            x,
+            y
+        );
+
+        this.UpdateContentHeight(y + 150);
+    }
+
+    private int DrawItemAndExpenseColumns(
+        SpriteBatch b,
+        string itemTitle,
+        List<ItemSummary> items,
+        string expenseTitle,
+        List<ExpenseSummary> expenses,
+        int x,
+        int y
+    )
+    {
+        int leftX = x;
+        int rightX = x + 360;
+
+        this.DrawLine(b, itemTitle, leftX, y);
+        this.DrawLine(b, expenseTitle, rightX, y);
+
+        y += 45;
+
+        int leftY = y;
+        int rightY = y;
 
         if (items.Count == 0)
         {
-            this.DrawLine(b, "No sales recorded this season.", x, y);
+            this.DrawLine(b, "No sales recorded.", leftX, leftY);
+            leftY += 35;
+        }
+        else
+        {
+            foreach (var item in items)
+            {
+                this.DrawItemSummaryLine(
+                    b,
+                    item,
+                    leftX,
+                    leftY
+                );
 
-            this.UpdateContentHeight(y + 150);
-
-            return;
+                leftY += 38;
+            }
         }
 
-foreach (var item in items)
-{
-    this.DrawItemSummaryLine(
-        b,
-        item,
-        x,
-        y
-    );
+        if (expenses.Count == 0)
+        {
+            this.DrawLine(b, "No expenses recorded.", rightX, rightY);
+            rightY += 35;
+        }
+        else
+        {
+            foreach (var expense in expenses)
+            {
+                this.DrawExpenseSummaryLine(
+                    b,
+                    expense,
+                    rightX,
+                    rightY
+                );
 
-    y += 38;
-}
+                rightY += 38;
+            }
+        }
 
-        y += 60;
+        return Math.Max(leftY, rightY) + 55;
+    }
 
-        this.DrawLine(b, "28-Day Income Trend", x, y);
-        y += 50;
-
-        var trend = this.analyticsService.GetSeasonDailyIncome();
-
-this.DrawSeasonTrendChart(
-    b,
-    trend,
-    x,
-    y
-);
-
-y += 330;
-
-this.DrawLine(b, "Daily Income Details", x, y);
-y += 45;
-
-var dailyDetails = this.analyticsService.GetSeasonDailyIncomeDetailsToDate();
-
-if (dailyDetails.Count == 0)
-{
-    this.DrawLine(b, "No income days recorded this season.", x, y);
-    y += 35;
-}
-else
-{
-    foreach (var day in dailyDetails)
+    private int DrawDailyIncomeAndExpenseDetails(
+        SpriteBatch b,
+        List<DailyIncomeSummary> incomeDetails,
+        List<DailyIncomeSummary> expenseDetails,
+        int x,
+        int y
+    )
     {
-        this.DrawLine(
+        int leftX = x;
+        int rightX = x + 360;
+
+        this.DrawLine(b, "Daily Income Details", leftX, y);
+        this.DrawLine(b, "Daily Expense Details", rightX, y);
+
+        y += 45;
+
+        int leftY = y;
+        int rightY = y;
+
+        if (incomeDetails.Count == 0)
+        {
+            this.DrawLine(b, "No income days recorded.", leftX, leftY);
+            leftY += 35;
+        }
+        else
+        {
+            foreach (var day in incomeDetails)
+            {
+                this.DrawLine(
+                    b,
+                    $"{day.Label}   {day.Amount}g",
+                    leftX,
+                    leftY
+                );
+
+                leftY += 30;
+            }
+        }
+
+        if (expenseDetails.Count == 0)
+        {
+            this.DrawLine(b, "No expense days recorded.", rightX, rightY);
+            rightY += 35;
+        }
+        else
+        {
+            foreach (var day in expenseDetails)
+            {
+                this.DrawLine(
+                    b,
+                    $"{day.Label}   {day.Amount}g",
+                    rightX,
+                    rightY
+                );
+
+                rightY += 30;
+            }
+        }
+
+        return Math.Max(leftY, rightY) + 55;
+    }
+
+    private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
+    {
+        int chartWidth = 620;
+        int chartHeight = 260;
+
+        int left = x;
+        int top = y;
+        int bottom = y + chartHeight;
+        int right = x + chartWidth;
+
+        int maxValue = values.Count > 0 ? values.Max() : 0;
+
+        if (maxValue <= 0)
+            maxValue = 1;
+
+        this.DrawLineSegment(
             b,
-            $"{day.Label}   {day.Amount}g",
-            x,
-            y
+            new Vector2(left, bottom),
+            new Vector2(right, bottom),
+            2
         );
 
-        y += 30;
-    }
-}
-
-this.UpdateContentHeight(y + 150);
-    }
-
-  private void DrawAnnualReport(SpriteBatch b, int x, int y)
-{
-    this.DrawLine(b, $"Year: {Game1.year}", x, y);
-    y += 45;
-
-    this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
-    y += 55;
-
-    this.DrawLine(b, "Items Sold This Year", x, y);
-    y += 45;
-
-    var items = this.analyticsService.GetYearItemSummaries();
-
-    if (items.Count == 0)
-    {
-        this.DrawLine(b, "No sales recorded this year.", x, y);
-
-        this.UpdateContentHeight(y + 50);
-
-        return;
-    }
-    
-foreach (var item in items)
-{
-    this.DrawItemSummaryLine(
-        b,
-        item,
-        x,
-        y
-    );
-
-    y += 38;
-}
-
-    y += 60;
-
-    this.DrawLine(b, "112-Day Income Trend", x, y);
-    y += 50;
-
-    var trend = this.analyticsService.GetYearDailyIncome();
-
-this.DrawAnnualTrendChart(
-    b,
-    trend,
-    x,
-    y
-);
-
-y += 360;
-
-this.DrawLine(b, "Daily Income Details", x, y);
-y += 45;
-
-var dailyDetails = this.analyticsService.GetYearDailyIncomeDetailsToDate();
-
-if (dailyDetails.Count == 0)
-{
-    this.DrawLine(b, "No income days recorded this year.", x, y);
-    y += 35;
-}
-else
-{
-    foreach (var day in dailyDetails)
-    {
-        this.DrawLine(
+        this.DrawLineSegment(
             b,
-            $"{day.Label}   {day.Amount}g",
-            x,
-            y
+            new Vector2(left, top),
+            new Vector2(left, bottom),
+            2
         );
 
-        y += 30;
-    }
-}
-
-this.UpdateContentHeight(y + 150);
-}
-
-private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
-{
-    int chartWidth = 620;
-    int chartHeight = 260;
-
-    int left = x;
-    int top = y;
-    int bottom = y + chartHeight;
-    int right = x + chartWidth;
-
-    int maxValue = values.Count > 0 ? values.Max() : 0;
-
-    if (maxValue <= 0)
-        maxValue = 1;
-
-    this.DrawLineSegment(
-        b,
-        new Vector2(left, bottom),
-        new Vector2(right, bottom),
-        2
-    );
-
-    this.DrawLineSegment(
-        b,
-        new Vector2(left, top),
-        new Vector2(left, bottom),
-        2
-    );
-
-    if (values.Count >= 2)
-    {
-        float xStep = chartWidth / (float)(values.Count - 1);
-
-        Vector2? previousPoint = null;
-
-        for (int i = 0; i < values.Count; i++)
+        if (values.Count >= 2)
         {
-            float pointX = left + i * xStep;
-            float normalized = values[i] / (float)maxValue;
-            float pointY = bottom - normalized * chartHeight;
+            float xStep = chartWidth / (float)(values.Count - 1);
 
-            Vector2 currentPoint = new Vector2(pointX, pointY);
+            Vector2? previousPoint = null;
 
-            if (previousPoint.HasValue)
+            for (int i = 0; i < values.Count; i++)
             {
-                this.DrawLineSegment(
-                    b,
-                    previousPoint.Value,
-                    currentPoint,
-                    3
+                float pointX = left + i * xStep;
+                float normalized = values[i] / (float)maxValue;
+                float pointY = bottom - normalized * chartHeight;
+
+                Vector2 currentPoint = new Vector2(pointX, pointY);
+
+                if (previousPoint.HasValue)
+                {
+                    this.DrawLineSegment(
+                        b,
+                        previousPoint.Value,
+                        currentPoint,
+                        3
+                    );
+                }
+
+                previousPoint = currentPoint;
+
+                b.Draw(
+                    Game1.staminaRect,
+                    new Rectangle(
+                        (int)pointX - 3,
+                        (int)pointY - 3,
+                        6,
+                        6
+                    ),
+                    this.chartColor
                 );
             }
-
-            previousPoint = currentPoint;
-
-            b.Draw(
-                Game1.staminaRect,
-                new Rectangle(
-                    (int)pointX - 3,
-                    (int)pointY - 3,
-                    6,
-                    6
-                ),
-                this.chartColor
-            );
         }
+
+        Utility.drawTextWithShadow(
+            b,
+            "1",
+            Game1.smallFont,
+            new Vector2(left - 5, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            "14",
+            Game1.smallFont,
+            new Vector2(left + chartWidth / 2 - 10, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            "28",
+            Game1.smallFont,
+            new Vector2(right - 20, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            $"{maxValue}g",
+            Game1.smallFont,
+            new Vector2(left + 10, top - 35),
+            Game1.textColor
+        );
     }
 
-    Utility.drawTextWithShadow(
-        b,
-        "1",
-        Game1.smallFont,
-        new Vector2(left - 5, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        "14",
-        Game1.smallFont,
-        new Vector2(left + chartWidth / 2 - 10, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        "28",
-        Game1.smallFont,
-        new Vector2(right - 20, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        $"{maxValue}g",
-        Game1.smallFont,
-        new Vector2(left + 10, top - 35),
-        Game1.textColor
-    );
-}
-   private void DrawAnnualTrendChart(SpriteBatch b, List<int> values, int x, int y)
-{
-    int chartWidth = 620;
-    int chartHeight = 260;
-
-    int left = x;
-    int top = y;
-    int bottom = y + chartHeight;
-    int right = x + chartWidth;
-
-    int maxValue = values.Count > 0 ? values.Max() : 0;
-
-    if (maxValue <= 0)
-        maxValue = 1;
-
-    this.DrawLineSegment(
-        b,
-        new Vector2(left, bottom),
-        new Vector2(right, bottom),
-        2
-    );
-
-    this.DrawLineSegment(
-        b,
-        new Vector2(left, top),
-        new Vector2(left, bottom),
-        2
-    );
-
-    if (values.Count >= 2)
+    private void DrawAnnualTrendChart(SpriteBatch b, List<int> values, int x, int y)
     {
-        float xStep = chartWidth / (float)(values.Count - 1);
+        int chartWidth = 620;
+        int chartHeight = 260;
 
-        Vector2? previousPoint = null;
+        int left = x;
+        int top = y;
+        int bottom = y + chartHeight;
+        int right = x + chartWidth;
 
-        for (int i = 0; i < values.Count; i++)
+        int maxValue = values.Count > 0 ? values.Max() : 0;
+
+        if (maxValue <= 0)
+            maxValue = 1;
+
+        this.DrawLineSegment(
+            b,
+            new Vector2(left, bottom),
+            new Vector2(right, bottom),
+            2
+        );
+
+        this.DrawLineSegment(
+            b,
+            new Vector2(left, top),
+            new Vector2(left, bottom),
+            2
+        );
+
+        if (values.Count >= 2)
         {
-            float pointX = left + i * xStep;
-            float normalized = values[i] / (float)maxValue;
-            float pointY = bottom - normalized * chartHeight;
+            float xStep = chartWidth / (float)(values.Count - 1);
 
-            Vector2 currentPoint = new Vector2(pointX, pointY);
+            Vector2? previousPoint = null;
 
-            if (previousPoint.HasValue)
+            for (int i = 0; i < values.Count; i++)
             {
-                this.DrawLineSegment(
-                    b,
-                    previousPoint.Value,
-                    currentPoint,
-                    2
-                );
+                float pointX = left + i * xStep;
+                float normalized = values[i] / (float)maxValue;
+                float pointY = bottom - normalized * chartHeight;
+
+                Vector2 currentPoint = new Vector2(pointX, pointY);
+
+                if (previousPoint.HasValue)
+                {
+                    this.DrawLineSegment(
+                        b,
+                        previousPoint.Value,
+                        currentPoint,
+                        2
+                    );
+                }
+
+                previousPoint = currentPoint;
             }
-
-            previousPoint = currentPoint;
         }
+
+        Utility.drawTextWithShadow(
+            b,
+            "Spring 1",
+            Game1.smallFont,
+            new Vector2(left - 5, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            "Summer 1",
+            Game1.smallFont,
+            new Vector2(left + chartWidth * 0.25f - 25, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            "Fall 1",
+            Game1.smallFont,
+            new Vector2(left + chartWidth * 0.50f - 20, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            "Winter 1",
+            Game1.smallFont,
+            new Vector2(left + chartWidth * 0.75f - 25, bottom + 10),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            $"{maxValue}g",
+            Game1.smallFont,
+            new Vector2(left + 10, top - 35),
+            Game1.textColor
+        );
     }
-
-    Utility.drawTextWithShadow(
-        b,
-        "Spring 1",
-        Game1.smallFont,
-        new Vector2(left - 5, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        "Summer 1",
-        Game1.smallFont,
-        new Vector2(left + chartWidth * 0.25f - 25, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        "Fall 1",
-        Game1.smallFont,
-        new Vector2(left + chartWidth * 0.50f - 20, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        "Winter 1",
-        Game1.smallFont,
-        new Vector2(left + chartWidth * 0.75f - 25, bottom + 10),
-        Game1.textColor
-    );
-
-    Utility.drawTextWithShadow(
-        b,
-        $"{maxValue}g",
-        Game1.smallFont,
-        new Vector2(left + 10, top - 35),
-        Game1.textColor
-    );
-}
 
     private void DrawLineSegment(
         SpriteBatch b,
@@ -648,6 +740,53 @@ private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
         );
     }
 
+    private void DrawItemSummaryLine(SpriteBatch b, ItemSummary item, int x, int y)
+    {
+        int textX = x;
+
+        if (!string.IsNullOrWhiteSpace(item.ItemId))
+        {
+            try
+            {
+                Item iconItem = ItemRegistry.Create(item.ItemId);
+
+                iconItem.drawInMenu(
+                    b,
+                    new Vector2(x, y - 12),
+                    0.65f,
+                    1f,
+                    0.9f,
+                    StackDrawType.Hide,
+                    Color.White,
+                    false
+                );
+
+                textX = x + 55;
+            }
+            catch
+            {
+                textX = x;
+            }
+        }
+
+        this.DrawLine(
+            b,
+            $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
+            textX,
+            y
+        );
+    }
+
+    private void DrawExpenseSummaryLine(SpriteBatch b, ExpenseSummary expense, int x, int y)
+    {
+        this.DrawLine(
+            b,
+            $"{expense.Category}   {expense.Amount}g",
+            x,
+            y
+        );
+    }
+
     private void UpdateContentHeight(int finalY)
     {
         int scrolledContentStartY = this.contentStartY - this.scrollOffset;
@@ -663,42 +802,7 @@ private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
             this.GetMaxScrollOffset()
         );
     }
-private void DrawItemSummaryLine(SpriteBatch b, RealityCheck.Models.ItemSummary item, int x, int y)
-{
-    int textX = x;
 
-    if (!string.IsNullOrWhiteSpace(item.ItemId))
-    {
-        try
-        {
-            Item iconItem = ItemRegistry.Create(item.ItemId);
-
-            iconItem.drawInMenu(
-                b,
-                new Vector2(x, y - 12),
-                0.65f,
-                1f,
-                0.9f,
-                StackDrawType.Hide,
-                Color.White,
-                false
-            );
-
-            textX = x + 55;
-        }
-        catch
-        {
-            textX = x;
-        }
-    }
-
-    this.DrawLine(
-        b,
-        $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
-        textX,
-        y
-    );
-}
     private void DrawLine(SpriteBatch b, string text, int x, int y)
     {
         Utility.drawTextWithShadow(

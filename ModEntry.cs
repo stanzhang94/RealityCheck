@@ -14,6 +14,7 @@ public class ModEntry : Mod
     private LedgerService? ledgerService;
     private AnalyticsService? analyticsService;
     private IncomeEvents? incomeEvents;
+    private ExpenseEvents? expenseEvents;
 
     public override void Entry(IModHelper helper)
     {
@@ -27,6 +28,11 @@ public class ModEntry : Mod
             );
 
             this.incomeEvents = new IncomeEvents(
+                this.ledgerService,
+                this.Monitor
+            );
+
+            this.expenseEvents = new ExpenseEvents(
                 this.ledgerService,
                 this.Monitor
             );
@@ -47,6 +53,9 @@ public class ModEntry : Mod
         helper.Events.GameLoop.Saving += this.OnSaving;
         helper.Events.GameLoop.DayEnding += this.incomeEvents.OnDayEnding;
         helper.Events.Input.ButtonPressed += this.OnButtonPressed;
+        helper.Events.GameLoop.SaveLoaded += this.expenseEvents.OnSaveLoaded;
+        helper.Events.GameLoop.DayStarted += this.expenseEvents.OnDayStarted;
+        helper.Events.GameLoop.UpdateTicked += this.expenseEvents.OnUpdateTicked;
 
         this.Monitor.Log("Reality Check loaded.", LogLevel.Info);
     }

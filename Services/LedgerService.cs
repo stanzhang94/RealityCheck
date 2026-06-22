@@ -7,33 +7,51 @@ namespace RealityCheck.Services;
 
 public class LedgerService
 {
+    private const string DataPath = "data/save-data.json";
+
     private readonly IModHelper helper;
     private readonly IMonitor monitor;
 
-    private SaveData data = new();
-
-    private const string SaveFilePath = "data/reality-check.json";
+    private SaveData data;
 
     public LedgerService(IModHelper helper, IMonitor monitor)
     {
         this.helper = helper;
         this.monitor = monitor;
+
+        this.data = new SaveData();
+
+        this.Load();
     }
 
     public void Load()
     {
-        this.data = this.helper.Data.ReadJsonFile<SaveData>(SaveFilePath) ?? new SaveData();
+        this.data =
+            this.helper.Data.ReadJsonFile<SaveData>(DataPath)
+            ?? new SaveData();
 
-        this.monitor.Log($"Loaded {this.data.Ledger.Count} ledger entries.", LogLevel.Trace);
+        this.monitor.Log(
+            "Ledger loaded from JSON.",
+            LogLevel.Trace
+        );
     }
 
-    public void Save()
+    public List<LedgerEntry> GetEntries()
     {
-        this.helper.Data.WriteJsonFile(SaveFilePath, this.data);
+        return this.data.Ledger;
     }
 
-public void AddIncome(string source, string itemName, int quantity, int amount, string itemId = "")
+    public void AddIncome(
+        string source,
+        string itemName,
+        int quantity,
+        int amount,
+        string itemId = ""
+    )
     {
+        if (amount <= 0)
+            return;
+
         var entry = new LedgerEntry
         {
             Year = Game1.year,
@@ -49,23 +67,68 @@ public void AddIncome(string source, string itemName, int quantity, int amount, 
         };
 
         this.data.Ledger.Add(entry);
-        this.Save();
 
-        this.monitor.Log($"Income recorded: {itemName} x{quantity} = {amount}g from {source}", LogLevel.Trace);
+        this.monitor.Log(
+            $"Income recorded in memory: {itemName} x{quantity} = {amount}g from {source}",
+            LogLevel.Trace
+        );
     }
 
-    public IReadOnlyList<LedgerEntry> GetEntries()
+    public void AddExpense(
+        string source,
+        string itemName,
+        int quantity,
+        int amount,
+        string itemId = ""
+    )
     {
-        return this.data.Ledger;
+        if (amount <= 0)
+            return;
+
+        var entry = new LedgerEntry
+        {
+            Year = Game1.year,
+            Season = Game1.currentSeason,
+            Day = Game1.dayOfMonth,
+            Type = "Expense",
+            Source = source,
+            ItemName = itemName,
+            ItemId = itemId,
+            Quantity = quantity,
+            Amount = amount,
+            TimeOfDay = Game1.timeOfDay
+        };
+
+        this.data.Ledger.Add(entry);
+
+        this.monitor.Log(
+            $"Expense recorded in memory: {itemName} x{quantity} = {amount}g from {source}",
+            LogLevel.Trace
+        );
     }
-        public void Clear()
+
+    public void Clear()
     {
         this.data.Ledger.Clear();
+
         this.Save();
 
         this.monitor.Log(
             "Ledger cleared.",
             LogLevel.Info
+        );
+    }
+
+    public void Save()
+    {
+        this.helper.Data.WriteJsonFile(
+            DataPath,
+            this.data
+        );
+
+        this.monitor.Log(
+            "Ledger saved to JSON.",
+            LogLevel.Trace
         );
     }
 }

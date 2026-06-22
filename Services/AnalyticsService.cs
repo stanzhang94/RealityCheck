@@ -97,6 +97,16 @@ public class AnalyticsService
         return this.GetYearIncome() - this.GetYearExpense();
     }
 
+    public int GetOutstandingBalance()
+    {
+        return this.ledgerService.GetOutstandingBalance();
+    }
+
+    public int GetEffectiveBalance()
+    {
+        return this.ledgerService.GetEffectiveBalance();
+    }
+
     public List<ItemSummary> GetTodayItemSummaries()
     {
         return this.ledgerService.GetEntries()

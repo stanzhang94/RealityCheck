@@ -15,6 +15,8 @@ public class LedgerService
 
     private SaveData data;
 
+    private int suppressedExpenseAmount = 0;
+
     public LedgerService(IModHelper helper, IMonitor monitor)
     {
         this.helper = helper;
@@ -40,6 +42,16 @@ public class LedgerService
     public List<LedgerEntry> GetEntries()
     {
         return this.data.Ledger;
+    }
+
+    public int GetOutstandingBalance()
+    {
+        return this.data.OutstandingBalance;
+    }
+
+    public int GetEffectiveBalance()
+    {
+        return Game1.player.Money - this.data.OutstandingBalance;
     }
 
     public void AddIncome(
@@ -139,14 +151,116 @@ public class LedgerService
         );
     }
 
+    public void ChargeObligation(
+        string source,
+        string category,
+        int amount
+    )
+    {
+        if (amount <= 0)
+            return;
+
+        this.AddExpense(
+            source,
+            category,
+            1,
+            amount
+        );
+
+        int availableMoney = Game1.player.Money;
+        int paidAmount = Math.Min(
+            availableMoney,
+            amount
+        );
+
+        int unpaidAmount = amount - paidAmount;
+
+        if (paidAmount > 0)
+        {
+            this.SuppressNextExpenseAmount(paidAmount);
+
+            Game1.player.Money -= paidAmount;
+
+            this.monitor.Log(
+                $"Obligation paid immediately: {category} = {paidAmount}g",
+                LogLevel.Info
+            );
+        }
+
+        if (unpaidAmount > 0)
+        {
+            this.AddOutstandingBalance(unpaidAmount);
+
+            this.monitor.Log(
+                $"Outstanding balance increased by {unpaidAmount}g from {category}.",
+                LogLevel.Info
+            );
+
+            Game1.showGlobalMessage(
+                $"Unpaid obligation added: -{unpaidAmount}g"
+            );
+        }
+    }
+
+    public void AddOutstandingBalance(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        this.data.OutstandingBalance += amount;
+    }
+
+    public int ReduceOutstandingBalance(int amount)
+    {
+        if (amount <= 0)
+            return 0;
+
+        int paidAmount = Math.Min(
+            amount,
+            this.data.OutstandingBalance
+        );
+
+        this.data.OutstandingBalance -= paidAmount;
+
+        return paidAmount;
+    }
+
+    public void SuppressNextExpenseAmount(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        this.suppressedExpenseAmount += amount;
+    }
+
+    public int ConsumeSuppressedExpenseAmount(int expenseAmount)
+    {
+        if (expenseAmount <= 0)
+            return 0;
+
+        if (this.suppressedExpenseAmount <= 0)
+            return 0;
+
+        int consumedAmount = Math.Min(
+            expenseAmount,
+            this.suppressedExpenseAmount
+        );
+
+        this.suppressedExpenseAmount -= consumedAmount;
+
+        return consumedAmount;
+    }
+
     public void Clear()
     {
         this.data.Ledger.Clear();
+        this.data.OutstandingBalance = 0;
+        this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger cleared.",
+            "Ledger and outstanding balance cleared.",
             LogLevel.Info
         );
     }

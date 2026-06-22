@@ -239,6 +239,8 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Date: Year {Game1.year} {Game1.currentSeason} {Game1.dayOfMonth}", x, y);
         y += 45;
 
+        y = this.DrawBalanceSummary(b, x, y);
+
         this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
         y += 35;
 
@@ -265,6 +267,8 @@ public class FinanceMenu : IClickableMenu
     {
         this.DrawLine(b, $"Season: Year {Game1.year} {Game1.currentSeason}", x, y);
         y += 45;
+
+        y = this.DrawBalanceSummary(b, x, y);
 
         this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
         y += 35;
@@ -329,6 +333,8 @@ public class FinanceMenu : IClickableMenu
         this.DrawLine(b, $"Year: {Game1.year}", x, y);
         y += 45;
 
+        y = this.DrawBalanceSummary(b, x, y);
+
         this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
         y += 35;
 
@@ -385,6 +391,31 @@ public class FinanceMenu : IClickableMenu
         );
 
         this.UpdateContentHeight(y + 150);
+    }
+
+    private int DrawBalanceSummary(SpriteBatch b, int x, int y)
+    {
+        int outstandingBalance = this.analyticsService.GetOutstandingBalance();
+
+        this.DrawLine(
+            b,
+            $"Outstanding Balance: {this.FormatDebt(outstandingBalance)}",
+            x,
+            y
+        );
+
+        y += 35;
+
+        this.DrawLine(
+            b,
+            $"Effective Balance: {this.analyticsService.GetEffectiveBalance()}g",
+            x,
+            y
+        );
+
+        y += 55;
+
+        return y;
     }
 
     private int DrawItemAndExpenseColumns(
@@ -788,6 +819,14 @@ public class FinanceMenu : IClickableMenu
     }
 
     private string FormatExpense(int amount)
+    {
+        if (amount <= 0)
+            return "0g";
+
+        return $"-{amount}g";
+    }
+
+    private string FormatDebt(int amount)
     {
         if (amount <= 0)
             return "0g";

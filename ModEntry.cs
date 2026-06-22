@@ -15,6 +15,7 @@ public class ModEntry : Mod
     private AnalyticsService? analyticsService;
     private IncomeEvents? incomeEvents;
     private ExpenseEvents? expenseEvents;
+    private TaxEvents taxEvents = null!;
 
     public override void Entry(IModHelper helper)
     {
@@ -35,6 +36,10 @@ public class ModEntry : Mod
             this.expenseEvents = new ExpenseEvents(
                 this.ledgerService,
                 this.Monitor
+            );
+            this.taxEvents = new TaxEvents(
+            this.ledgerService,
+            this.Monitor
             );
 
             ShopSalePatch.Initialize(
@@ -57,6 +62,7 @@ public class ModEntry : Mod
         helper.Events.GameLoop.DayStarted += this.expenseEvents.OnDayStarted;
         helper.Events.GameLoop.UpdateTicked += this.expenseEvents.OnUpdateTicked;
         helper.Events.GameLoop.DayEnding += this.expenseEvents.OnDayEnding;
+        helper.Events.GameLoop.DayStarted += this.taxEvents.OnDayStarted;
 
         this.Monitor.Log("Reality Check loaded.", LogLevel.Info);
     }

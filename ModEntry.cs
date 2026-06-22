@@ -44,5 +44,15 @@ public class ModEntry : Mod
         {
             Game1.activeClickableMenu = new FinanceMenu(this.ledgerService!);
         }
+if (e.Button == SButton.I)
+{
+
+    this.ledgerService!.AddIncome(
+        "Test",
+        "Parsnip",
+        1,
+        35
+    );
+}
     }
 }

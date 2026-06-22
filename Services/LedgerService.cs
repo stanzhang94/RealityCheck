@@ -57,4 +57,14 @@ public class LedgerService
     {
         return this.data.Ledger;
     }
+        public void Clear()
+    {
+        this.data.Ledger.Clear();
+        this.Save();
+
+        this.monitor.Log(
+            "Ledger cleared.",
+            LogLevel.Info
+        );
+    }
 }

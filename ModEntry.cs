@@ -54,19 +54,15 @@ public class ModEntry : Mod
         if (!Context.IsWorldReady)
             return;
 
-        if (e.Button == SButton.F8)
+        if (e.Button == SButton.O)
         {
-            Game1.activeClickableMenu = new FinanceMenu(this.ledgerService!);
+            Game1.activeClickableMenu =
+                new FinanceMenu(this.ledgerService!);
         }
-        if (e.Button == SButton.I)
+        if (e.Button == SButton.R)
         {
+            this.ledgerService!.Clear();
+        }
 
-            this.ledgerService!.AddIncome(
-                "Test",
-                "Parsnip",
-                1,
-                35
-            );
-        }
     }
 }

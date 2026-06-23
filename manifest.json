@@ -1,8 +1,8 @@
 {
   "Name": "Reality Check",
   "Author": "Stan",
-  "Version": "0.5.0",
-  "Description": "A financial reality check for your farm.",
+  "Version": "1.0.0",
+  "Description": "Adds weekly taxes, health insurance, and financial reports to make farm life a little less consequence-free.",
   "UniqueID": "Stan.RealityCheck",
   "EntryDll": "RealityCheck.dll",
   "MinimumApiVersion": "4.0.0",

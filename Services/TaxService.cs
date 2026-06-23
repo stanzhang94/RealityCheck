@@ -36,6 +36,7 @@ public class TaxService
  
    private readonly LedgerService ledgerService;
    private readonly IMonitor? monitor;
+   public TaxRecord? LastSettledTaxRecord { get; private set; }
  
    public TaxService(
        LedgerService ledgerService,
@@ -409,128 +410,130 @@ public class TaxService
        return assessment;
    }
  
-   public bool TrySettlePreviousTaxWeek(out string message)
-   {
-       message = "";
- 
-       if (!this.IsTaxSettlementDay())
-           return false;
- 
-       if (!this.TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek))
-           return false;
- 
-       if (this.HasTaxRecordForPeriod(
-           previousWeek.Year,
-           previousWeek.Season,
-           previousWeek.StartDay,
-           previousWeek.EndDay
-       ))
-       {
-           message =
-               $"Tax settlement skipped: record already exists for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
- 
-           return false;
-       }
- 
-       int taxableShippingBinIncome = this.GetTaxableShippingBinIncomeForPeriod(
-           previousWeek.Year,
-           previousWeek.Season,
-           previousWeek.StartDay,
-           previousWeek.EndDay
-       );
- 
-       double incomeTaxRate = this.GetIncomeTaxRateForAmount(
-           taxableShippingBinIncome
-       );
- 
-       int incomeTaxAmount = (int)Math.Floor(
-           taxableShippingBinIncome * incomeTaxRate
-       );
- 
-       int propertyTaxAmount = this.GetPropertyTaxAmountForPeriod(
-           previousWeek.Year,
-           previousWeek.Season,
-           previousWeek.StartDay,
-           previousWeek.EndDay
-       );
- 
-       int businessPropertyTaxAmount = this.GetBusinessPropertyTaxAmountForPeriod(
-           previousWeek.Year,
-           previousWeek.Season,
-           previousWeek.StartDay,
-           previousWeek.EndDay
-       );
- 
-       int totalTaxAmount =
-           incomeTaxAmount
-           + propertyTaxAmount
-           + businessPropertyTaxAmount;
- 
-       if (totalTaxAmount <= 0)
-       {
-           message =
-               $"No tax due for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
- 
-           return false;
-       }
- 
-       if (incomeTaxAmount > 0)
-       {
-           this.ledgerService.ChargeObligation(
-               "Reality Check",
-               "Income Tax",
-               incomeTaxAmount
-           );
-       }
- 
-       if (propertyTaxAmount > 0)
-       {
-           this.ledgerService.ChargeObligation(
-               "Reality Check",
-               "Property Tax",
-               propertyTaxAmount
-           );
-       }
- 
-       if (businessPropertyTaxAmount > 0)
-       {
-           this.ledgerService.ChargeObligation(
-               "Reality Check",
-               "Business Property Tax",
-               businessPropertyTaxAmount
-           );
-       }
- 
-       var record = new TaxRecord
-       {
-           Year = previousWeek.Year,
-           Season = previousWeek.Season,
-           WeekNumber = previousWeek.WeekNumber,
-           CoveredStartDay = previousWeek.StartDay,
-           CoveredEndDay = previousWeek.EndDay,
- 
-           SettlementYear = Game1.year,
-           SettlementSeason = Game1.currentSeason,
-           SettlementDay = Game1.dayOfMonth,
- 
-           TaxableShippingBinIncome = taxableShippingBinIncome,
-           IncomeTaxRate = incomeTaxRate,
- 
-           IncomeTaxAmount = incomeTaxAmount,
-           PropertyTaxAmount = propertyTaxAmount,
-           BusinessPropertyTaxAmount = businessPropertyTaxAmount,
- 
-           TotalTaxAmount = totalTaxAmount
-       };
- 
-       this.ledgerService.AddTaxRecord(record);
- 
-       message =
-           $"Weekly tax settled: {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}, total -{totalTaxAmount}g.";
- 
-       return true;
-   }
- 
+  public bool TrySettlePreviousTaxWeek(out string message)
+{
+    message = "";
+    this.LastSettledTaxRecord = null;
+
+    if (!this.IsTaxSettlementDay())
+        return false;
+
+    if (!this.TryGetPreviousTaxWeek(out TaxWeekInfo previousWeek))
+        return false;
+
+    if (this.HasTaxRecordForPeriod(
+        previousWeek.Year,
+        previousWeek.Season,
+        previousWeek.StartDay,
+        previousWeek.EndDay
+    ))
+    {
+        message =
+            $"Tax settlement skipped: record already exists for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
+
+        return false;
+    }
+
+    int taxableShippingBinIncome = this.GetTaxableShippingBinIncomeForPeriod(
+        previousWeek.Year,
+        previousWeek.Season,
+        previousWeek.StartDay,
+        previousWeek.EndDay
+    );
+
+    double incomeTaxRate = this.GetIncomeTaxRateForAmount(
+        taxableShippingBinIncome
+    );
+
+    int incomeTaxAmount = (int)Math.Floor(
+        taxableShippingBinIncome * incomeTaxRate
+    );
+
+    int propertyTaxAmount = this.GetPropertyTaxAmountForPeriod(
+        previousWeek.Year,
+        previousWeek.Season,
+        previousWeek.StartDay,
+        previousWeek.EndDay
+    );
+
+    int businessPropertyTaxAmount = this.GetBusinessPropertyTaxAmountForPeriod(
+        previousWeek.Year,
+        previousWeek.Season,
+        previousWeek.StartDay,
+        previousWeek.EndDay
+    );
+
+    int totalTaxAmount =
+        incomeTaxAmount
+        + propertyTaxAmount
+        + businessPropertyTaxAmount;
+
+    if (totalTaxAmount <= 0)
+    {
+        message =
+            $"No tax due for {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}.";
+
+        return false;
+    }
+
+    if (incomeTaxAmount > 0)
+    {
+        this.ledgerService.ChargeObligation(
+            "Reality Check",
+            "Income Tax",
+            incomeTaxAmount
+        );
+    }
+
+    if (propertyTaxAmount > 0)
+    {
+        this.ledgerService.ChargeObligation(
+            "Reality Check",
+            "Property Tax",
+            propertyTaxAmount
+        );
+    }
+
+    if (businessPropertyTaxAmount > 0)
+    {
+        this.ledgerService.ChargeObligation(
+            "Reality Check",
+            "Business Property Tax",
+            businessPropertyTaxAmount
+        );
+    }
+
+    var record = new TaxRecord
+    {
+        Year = previousWeek.Year,
+        Season = previousWeek.Season,
+        WeekNumber = previousWeek.WeekNumber,
+        CoveredStartDay = previousWeek.StartDay,
+        CoveredEndDay = previousWeek.EndDay,
+
+        SettlementYear = Game1.year,
+        SettlementSeason = Game1.currentSeason,
+        SettlementDay = Game1.dayOfMonth,
+
+        TaxableShippingBinIncome = taxableShippingBinIncome,
+        IncomeTaxRate = incomeTaxRate,
+
+        IncomeTaxAmount = incomeTaxAmount,
+        PropertyTaxAmount = propertyTaxAmount,
+        BusinessPropertyTaxAmount = businessPropertyTaxAmount,
+
+        TotalTaxAmount = totalTaxAmount
+    };
+
+    this.ledgerService.AddTaxRecord(record);
+
+    this.LastSettledTaxRecord = record;
+
+    message =
+        $"Weekly tax settled: {this.FormatSeason(previousWeek.Season)} {previousWeek.StartDay}-{previousWeek.EndDay}, total -{totalTaxAmount}g.";
+
+    return true;
+}
    public List<TaxRecord> GetRecentTaxRecords(int maxRecords = 16)
    {
        return this.ledgerService.GetTaxRecords()

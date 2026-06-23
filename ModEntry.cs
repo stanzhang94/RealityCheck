@@ -38,8 +38,9 @@ public class ModEntry : Mod
                 this.Monitor
             );
             this.taxEvents = new TaxEvents(
-            this.ledgerService,
-            this.Monitor
+                this.ledgerService,
+                this.Helper,
+                this.Monitor
             );
 
             ShopSalePatch.Initialize(

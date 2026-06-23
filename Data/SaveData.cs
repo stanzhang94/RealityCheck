@@ -15,6 +15,8 @@ public class SaveData
 
     public List<string> SignedTaxNoticeIds { get; set; } = new();
 
+    public List<HealthInsuranceClaim> HealthInsuranceClaims { get; set; } = new();
+
     // Positive internal value.
     // UI may display this as negative debt if needed.
     public int OutstandingBalance { get; set; } = 0;

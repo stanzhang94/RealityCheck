@@ -1,5 +1,5 @@
 using System;
-using Microsoft.Xna.Framework.Input;
+using RealityCheck.Models;
 using RealityCheck.Services;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -14,23 +14,22 @@ public class ExpenseEvents
 
     private const int CollapseDetectionWindowTicks = 3600;
 
-    private const int TestObligationAmount = 5000;
-
     private readonly LedgerService ledgerService;
+    private readonly HealthInsuranceNoticeService healthInsuranceNoticeService;
     private readonly IMonitor monitor;
 
     private int? lastMoney;
 
     private int recentlyCollapsedTicks = 0;
 
-    private bool wasBKeyDown = false;
-
     public ExpenseEvents(
         LedgerService ledgerService,
+        HealthInsuranceNoticeService healthInsuranceNoticeService,
         IMonitor monitor
     )
     {
         this.ledgerService = ledgerService;
+        this.healthInsuranceNoticeService = healthInsuranceNoticeService;
         this.monitor = monitor;
     }
 
@@ -56,6 +55,8 @@ public class ExpenseEvents
         this.lastMoney = Game1.player.Money;
         this.recentlyCollapsedTicks = 0;
 
+        this.ProcessPendingHealthInsuranceClaims();
+
         this.monitor.Log(
             $"Expense tracker reset for new day. Current money: {this.lastMoney}g",
             LogLevel.Trace
@@ -78,8 +79,6 @@ public class ExpenseEvents
         this.TrackCollapseFromLowHealth();
 
         this.TrackMoneyChanges();
-
-        this.HandleTestObligationKey();
 
         this.TickCollapseWindow();
     }
@@ -165,7 +164,7 @@ public class ExpenseEvents
 
         if (this.IsMedicalCollapseExpense())
         {
-            this.ApplyHealthInsuranceCoverage(expenseAmount);
+            this.CreatePendingHealthInsuranceClaim(expenseAmount);
 
             this.recentlyCollapsedTicks = 0;
         }
@@ -209,43 +208,95 @@ public class ExpenseEvents
         return this.recentlyCollapsedTicks > 0;
     }
 
-    private void ApplyHealthInsuranceCoverage(int medicalExpenseAmount)
+    private void CreatePendingHealthInsuranceClaim(int medicalExpenseAmount)
     {
-        int coverageAmount = (int)Math.Floor(
-            medicalExpenseAmount * HealthInsuranceCoverageRate
+        int coverageAmount = this.CalculateHealthInsuranceCoverage(
+            medicalExpenseAmount
         );
 
         if (coverageAmount <= 0)
             return;
 
-        Game1.player.Money += coverageAmount;
+        var claim = new HealthInsuranceClaim
+        {
+            MedicalExpenseYear = Game1.year,
+            MedicalExpenseSeason = Game1.currentSeason,
+            MedicalExpenseDay = Game1.dayOfMonth,
+            MedicalExpenseAmount = medicalExpenseAmount,
+            CoverageAmount = coverageAmount,
+            Processed = false
+        };
 
-        this.ledgerService.AddExpenseOffset(
-            "Reality Check",
-            "Health Insurance Coverage",
-            coverageAmount
-        );
-
-        this.ShowHealthInsuranceCoverageMessage(
-            coverageAmount,
-            medicalExpenseAmount
-        );
+        this.ledgerService.AddHealthInsuranceClaim(claim);
 
         this.monitor.Log(
-            $"Health Insurance Coverage applied: +{coverageAmount}g for medical expense {medicalExpenseAmount}g",
+            $"Health insurance claim created: medical expense {medicalExpenseAmount}g, pending coverage {coverageAmount}g",
             LogLevel.Info
         );
     }
 
-    private void ShowHealthInsuranceCoverageMessage(
-        int coverageAmount,
+    private void ProcessPendingHealthInsuranceClaims()
+    {
+        foreach (HealthInsuranceClaim claim in this.ledgerService.GetPendingHealthInsuranceClaims())
+        {
+            if (!this.ShouldProcessHealthInsuranceClaimToday(claim))
+                continue;
+
+            this.ApplyHealthInsuranceCoverage(claim);
+        }
+    }
+
+    private bool ShouldProcessHealthInsuranceClaimToday(
+        HealthInsuranceClaim claim
+    )
+    {
+        if (claim.MedicalExpenseYear != Game1.year)
+            return true;
+
+        if (claim.MedicalExpenseSeason != Game1.currentSeason)
+            return true;
+
+        return claim.MedicalExpenseDay != Game1.dayOfMonth;
+    }
+
+    private void ApplyHealthInsuranceCoverage(
+        HealthInsuranceClaim claim
+    )
+    {
+        if (claim.CoverageAmount <= 0)
+            return;
+
+        Game1.player.Money += claim.CoverageAmount;
+
+        this.ledgerService.AddExpenseOffset(
+            "Harvey Medical Clinic",
+            "Health Insurance Coverage",
+            claim.CoverageAmount
+        );
+
+        this.ledgerService.MarkHealthInsuranceClaimProcessed(
+            claim.Id,
+            Game1.year,
+            Game1.currentSeason,
+            Game1.dayOfMonth
+        );
+
+        this.healthInsuranceNoticeService.DeliverHealthInsuranceClaimNotice(
+            claim
+        );
+
+        this.monitor.Log(
+            $"Health Insurance Coverage processed: +{claim.CoverageAmount}g for medical expense {claim.MedicalExpenseAmount}g",
+            LogLevel.Info
+        );
+    }
+
+    private int CalculateHealthInsuranceCoverage(
         int medicalExpenseAmount
     )
     {
-        int coveragePercent = (int)(HealthInsuranceCoverageRate * 100);
-
-        Game1.showGlobalMessage(
-            $"Dear member of the Harvey Medical Insurance Fund, your {coveragePercent}% coverage has been paid: +{coverageAmount}g"
+        return (int)Math.Floor(
+            medicalExpenseAmount * HealthInsuranceCoverageRate
         );
     }
 
@@ -293,29 +344,5 @@ public class ExpenseEvents
             $"Mod-created expense charged: {expenseName} = {amount}g",
             LogLevel.Info
         );
-    }
-
-    private void HandleTestObligationKey()
-    {
-        bool isBKeyDown = Keyboard.GetState().IsKeyDown(Keys.B);
-
-        if (isBKeyDown && !this.wasBKeyDown)
-        {
-            if (Game1.activeClickableMenu == null)
-            {
-                this.ledgerService.ChargeObligation(
-                    "Reality Check",
-                    "Test Obligation",
-                    TestObligationAmount
-                );
-
-                this.monitor.Log(
-                    $"Test obligation charged: {TestObligationAmount}g",
-                    LogLevel.Info
-                );
-            }
-        }
-
-        this.wasBKeyDown = isBKeyDown;
     }
 }

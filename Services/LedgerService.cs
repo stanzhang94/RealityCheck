@@ -90,6 +90,22 @@ public class LedgerService
         return this.data.BusinessPropertyTaxDailyAssessments;
     }
 
+    public List<HealthInsuranceClaim> GetHealthInsuranceClaims()
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        return this.data.HealthInsuranceClaims;
+    }
+
+    public List<HealthInsuranceClaim> GetPendingHealthInsuranceClaims()
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        return this.data.HealthInsuranceClaims
+            .Where(c => !c.Processed)
+            .ToList();
+    }
+
     public bool HasPropertyTaxDailyAssessment(
         int year,
         string season,
@@ -179,6 +195,45 @@ public class LedgerService
             $"Tax record added in memory: Year {record.Year} {record.Season} Week {record.WeekNumber}, total tax {record.TotalTaxAmount}g",
             LogLevel.Trace
         );
+    }
+
+    public void AddHealthInsuranceClaim(HealthInsuranceClaim claim)
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (claim.MedicalExpenseAmount <= 0 || claim.CoverageAmount <= 0)
+            return;
+
+        if (string.IsNullOrWhiteSpace(claim.Id))
+            claim.Id = Guid.NewGuid().ToString("N");
+
+        this.data.HealthInsuranceClaims.Add(claim);
+
+        this.monitor.Log(
+            $"Health insurance claim added in memory: medical expense {claim.MedicalExpenseAmount}g, coverage {claim.CoverageAmount}g",
+            LogLevel.Trace
+        );
+    }
+
+    public void MarkHealthInsuranceClaimProcessed(
+        string claimId,
+        int processedYear,
+        string processedSeason,
+        int processedDay
+    )
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        HealthInsuranceClaim? claim = this.data.HealthInsuranceClaims
+            .FirstOrDefault(c => c.Id == claimId);
+
+        if (claim == null)
+            return;
+
+        claim.Processed = true;
+        claim.ProcessedYear = processedYear;
+        claim.ProcessedSeason = processedSeason;
+        claim.ProcessedDay = processedDay;
     }
 
     public int GetOutstandingBalance()
@@ -444,13 +499,14 @@ public class LedgerService
         this.data.PropertyTaxDailyAssessments.Clear();
         this.data.BusinessPropertyTaxDailyAssessments.Clear();
         this.data.SignedTaxNoticeIds.Clear();
+        this.data.HealthInsuranceClaims.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger, tax records, tax assessments, signed tax notices, and outstanding balance cleared for current save.",
+            "Ledger, tax records, tax assessments, signed tax notices, health insurance claims, and outstanding balance cleared for current save.",
             LogLevel.Info
         );
     }
@@ -493,6 +549,7 @@ public class LedgerService
         this.data.PropertyTaxDailyAssessments ??= new List<PropertyTaxDailyAssessment>();
         this.data.BusinessPropertyTaxDailyAssessments ??= new List<BusinessPropertyTaxDailyAssessment>();
         this.data.SignedTaxNoticeIds ??= new List<string>();
+        this.data.HealthInsuranceClaims ??= new List<HealthInsuranceClaim>();
     }
 
     private string GetCurrentSaveId()

@@ -15,6 +15,7 @@ public class ModEntry : Mod
     private AnalyticsService? analyticsService;
     private IncomeEvents? incomeEvents;
     private ExpenseEvents? expenseEvents;
+    private HealthInsuranceNoticeService? healthInsuranceNoticeService;
     private ConfigService? configService;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
@@ -42,8 +43,15 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        this.healthInsuranceNoticeService = new HealthInsuranceNoticeService(
+            this.ledgerService,
+            helper,
+            this.Monitor
+        );
+
         this.expenseEvents = new ExpenseEvents(
             this.ledgerService,
+            this.healthInsuranceNoticeService,
             this.Monitor
         );
 
@@ -81,6 +89,8 @@ public class ModEntry : Mod
         helper.Events.GameLoop.DayStarted += this.expenseEvents.OnDayStarted;
         helper.Events.GameLoop.UpdateTicked += this.expenseEvents.OnUpdateTicked;
         helper.Events.GameLoop.DayEnding += this.expenseEvents.OnDayEnding;
+
+        helper.Events.Content.AssetRequested += this.healthInsuranceNoticeService.OnAssetRequested;
 
         helper.Events.GameLoop.DayStarted += this.taxEvents.OnDayStarted;
 

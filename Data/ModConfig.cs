@@ -23,6 +23,26 @@ public class TaxConfig
         {
             MinimumTaxableIncome = 0,
             Rate = 0.00
+        },
+        new IncomeTaxBracketConfig
+        {
+            MinimumTaxableIncome = 5001,
+            Rate = 0.05
+        },
+        new IncomeTaxBracketConfig
+        {
+            MinimumTaxableIncome = 20001,
+            Rate = 0.08
+        },
+        new IncomeTaxBracketConfig
+        {
+            MinimumTaxableIncome = 50001,
+            Rate = 0.12
+        },
+        new IncomeTaxBracketConfig
+        {
+            MinimumTaxableIncome = 100001,
+            Rate = 0.15
         }
     };
 
@@ -63,9 +83,9 @@ public class PropertyTaxConfig
 {
     public bool EnableAgriculturalDeduction { get; set; } = true;
 
-    public int MaximumDailyAgriculturalDeduction { get; set; } = 1000;
+    public double MaximumWeeklyAgriculturalDeduction { get; set; } = 1000.0;
 
-    public int DailyAdministrativeFee { get; set; } = 3;
+    public double WeeklyAdministrativeFee { get; set; } = 50.0;
 
-    public int DailyDocumentationFee { get; set; } = 1;
+    public double WeeklyDocumentationFee { get; set; } = 10.0;
 }

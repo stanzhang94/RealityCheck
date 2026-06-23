@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
 using StardewValley;
@@ -14,37 +15,20 @@ public class TaxService
 {
    private const int StandardFarmTheoreticalTillableTiles = 3427;
  
-   private const double WeeklyAdministrativeFee = 50.0;
-   private const double WeeklyDocumentationFee = 10.0;
- 
-   private const double DailyAdministrativeFee = WeeklyAdministrativeFee / 7.0;
-   private const double DailyDocumentationFee = WeeklyDocumentationFee / 7.0;
- 
-   private const double MaxWeeklyAgriculturalDeduction = 1000.0;
-   private const double MaxDailyAgriculturalDeduction = MaxWeeklyAgriculturalDeduction / 7.0;
- 
-   private const int KegDailyTax = 48;
-   private const int PreservesJarDailyTax = 64;
-   private const int CaskDailyTax = 8;
-   private const int BeeHouseDailyTax = 34;
-   private const int MayonnaiseMachineDailyTax = 260;
-   private const int CheesePressDailyTax = 51;
-   private const int LoomDailyTax = 26;
-   private const int OilMakerDailyTax = 88;
-   private const int DehydratorDailyTax = 380;
-   private const int FishSmokerDailyTax = 137;
- 
    private readonly LedgerService ledgerService;
    private readonly IMonitor? monitor;
+   private readonly TaxConfig taxConfig;
    public TaxRecord? LastSettledTaxRecord { get; private set; }
  
    public TaxService(
        LedgerService ledgerService,
-       IMonitor? monitor = null
+       IMonitor? monitor = null,
+       TaxConfig? taxConfig = null
    )
    {
        this.ledgerService = ledgerService;
        this.monitor = monitor;
+       this.taxConfig = taxConfig ?? ConfigService.Current.Tax;
    }
  
    public int GetCurrentTaxWeekNumber()
@@ -252,8 +236,8 @@ public class TaxService
  
        double totalPropertyTaxAmount =
            taxablePropertyAmount
-           + DailyAdministrativeFee
-           + DailyDocumentationFee;
+           + this.GetDailyAdministrativeFee()
+           + this.GetDailyDocumentationFee();
  
        return new PropertyTaxDailyAssessment
        {
@@ -267,8 +251,8 @@ public class TaxService
            RiskShieldPremiumAmount = riskShieldPremium,
            DepreciationFactor = depreciationFactor,
            AgriculturalDeductionAmount = agriculturalDeduction,
-           AdministrativeFeeAmount = DailyAdministrativeFee,
-           DocumentationFeeAmount = DailyDocumentationFee,
+           AdministrativeFeeAmount = this.GetDailyAdministrativeFee(),
+           DocumentationFeeAmount = this.GetDailyDocumentationFee(),
            TotalPropertyTaxAmount = totalPropertyTaxAmount
        };
    }
@@ -391,16 +375,16 @@ public class TaxService
        }
  
        assessment.TotalBusinessPropertyTaxAmount =
-           this.GetTaxableBusinessPropertyCount(assessment.KegCount) * KegDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount) * PreservesJarDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.CaskCount) * CaskDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount) * BeeHouseDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount) * MayonnaiseMachineDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount) * CheesePressDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.LoomCount) * LoomDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount) * OilMakerDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount) * DehydratorDailyTax
-           + this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount) * FishSmokerDailyTax;
+           this.GetTaxableBusinessPropertyCount(assessment.KegCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Keg
+           + this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount) * this.taxConfig.BusinessPropertyDailyTaxRates.PreservesJar
+           + this.GetTaxableBusinessPropertyCount(assessment.CaskCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Cask
+           + this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount) * this.taxConfig.BusinessPropertyDailyTaxRates.BeeHouse
+           + this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount) * this.taxConfig.BusinessPropertyDailyTaxRates.MayonnaiseMachine
+           + this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount) * this.taxConfig.BusinessPropertyDailyTaxRates.CheesePress
+           + this.GetTaxableBusinessPropertyCount(assessment.LoomCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Loom
+           + this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount) * this.taxConfig.BusinessPropertyDailyTaxRates.OilMaker
+           + this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Dehydrator
+           + this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount) * this.taxConfig.BusinessPropertyDailyTaxRates.FishSmoker;
  
        this.LogBusinessPropertyTaxScan(
            assessment,
@@ -664,7 +648,7 @@ public class TaxService
  
    private int GetTaxableBusinessPropertyCount(int count)
    {
-       if (count <= 20)
+       if (count <= this.taxConfig.BusinessPropertyTaxThreshold)
            return 0;
  
        return count;
@@ -925,6 +909,21 @@ private void LogBusinessPropertyTaxScan(
        };
    }
  
+   private double GetDailyAdministrativeFee()
+   {
+       return this.taxConfig.PropertyTax.WeeklyAdministrativeFee / 7.0;
+   }
+
+   private double GetDailyDocumentationFee()
+   {
+       return this.taxConfig.PropertyTax.WeeklyDocumentationFee / 7.0;
+   }
+
+   private double GetMaxDailyAgriculturalDeduction()
+   {
+       return this.taxConfig.PropertyTax.MaximumWeeklyAgriculturalDeduction / 7.0;
+   }
+
    private double GetDepreciationFactor()
    {
        return Game1.year switch
@@ -939,6 +938,9 @@ private void LogBusinessPropertyTaxScan(
  
    private double GetTodayAgriculturalDeduction()
    {
+       if (!this.taxConfig.PropertyTax.EnableAgriculturalDeduction)
+           return 0;
+
        int plantedOutdoorTiles = this.CountOutdoorPlantedTiles();
  
        double plantingRatio = plantedOutdoorTiles
@@ -950,7 +952,7 @@ private void LogBusinessPropertyTaxScan(
            1
        );
  
-       return MaxDailyAgriculturalDeduction * plantingRatio;
+       return this.GetMaxDailyAgriculturalDeduction() * plantingRatio;
    }
  
    private int CountOutdoorPlantedTiles()
@@ -1149,38 +1151,55 @@ private void LogBusinessPropertyTaxScan(
  
    private double GetIncomeTaxRateForAmount(int amount)
    {
-       if (amount <= 5000)
-           return 0.00;
- 
-       if (amount <= 20000)
-           return 0.05;
- 
-       if (amount <= 50000)
-           return 0.08;
- 
-       if (amount <= 100000)
-           return 0.12;
- 
-       return 0.15;
+       IncomeTaxBracketConfig bracket = this.taxConfig.IncomeTaxBrackets
+           .OrderBy(b => b.MinimumTaxableIncome)
+           .LastOrDefault(b => amount >= b.MinimumTaxableIncome)
+           ?? new IncomeTaxBracketConfig
+           {
+               MinimumTaxableIncome = 0,
+               Rate = 0.00
+           };
+
+       return bracket.Rate;
    }
- 
+
    private string GetIncomeTaxBracketLabelForAmount(int amount)
    {
-       if (amount <= 5000)
-           return "0 - 5,000g: 0%";
- 
-       if (amount <= 20000)
-           return "5,001 - 20,000g: 5%";
- 
-       if (amount <= 50000)
-           return "20,001 - 50,000g: 8%";
- 
-       if (amount <= 100000)
-           return "50,001 - 100,000g: 12%";
- 
-       return "100,000g+: 15%";
+       List<IncomeTaxBracketConfig> brackets = this.taxConfig.IncomeTaxBrackets
+           .OrderBy(b => b.MinimumTaxableIncome)
+           .ToList();
+
+       if (brackets.Count == 0)
+           return "0g+: 0%";
+
+       for (int i = 0; i < brackets.Count; i++)
+       {
+           IncomeTaxBracketConfig current = brackets[i];
+           IncomeTaxBracketConfig? next = i + 1 < brackets.Count
+               ? brackets[i + 1]
+               : null;
+
+           bool applies = next == null
+               ? amount >= current.MinimumTaxableIncome
+               : amount >= current.MinimumTaxableIncome
+                   && amount < next.MinimumTaxableIncome;
+
+           if (!applies)
+               continue;
+
+           string minimum = this.FormatTaxAmount(current.MinimumTaxableIncome);
+           string maximum = next == null
+               ? "+"
+               : $" - {this.FormatTaxAmount(next.MinimumTaxableIncome - 1)}";
+
+           return $"{minimum}{maximum}: {this.FormatTaxRatePercent(current.Rate)}";
+       }
+
+       IncomeTaxBracketConfig first = brackets[0];
+
+       return $"{this.FormatTaxAmount(first.MinimumTaxableIncome)}+: {this.FormatTaxRatePercent(first.Rate)}";
    }
- 
+
    private bool IsShippingBinIncome(LedgerEntry entry)
    {
        if (string.IsNullOrWhiteSpace(entry.Source))

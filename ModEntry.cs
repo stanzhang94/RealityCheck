@@ -15,11 +15,19 @@ public class ModEntry : Mod
     private AnalyticsService? analyticsService;
     private IncomeEvents? incomeEvents;
     private ExpenseEvents? expenseEvents;
+    private ConfigService? configService;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
 
     public override void Entry(IModHelper helper)
     {
+        this.configService = new ConfigService(
+            helper,
+            this.Monitor
+        );
+
+        this.configService.Load();
+
         this.ledgerService = new LedgerService(
             helper,
             this.Monitor
@@ -42,7 +50,8 @@ public class ModEntry : Mod
         this.taxEvents = new TaxEvents(
             this.ledgerService,
             this.Helper,
-            this.Monitor
+            this.Monitor,
+            this.configService
         );
 
         this.taxNoticeMailRouter = new TaxNoticeMailRouter(

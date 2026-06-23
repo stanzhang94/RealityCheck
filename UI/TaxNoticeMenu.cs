@@ -5,6 +5,7 @@ using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using RealityCheck.Data;
 using RealityCheck.Models;
 using RealityCheck.Services;
 using StardewValley;
@@ -14,21 +15,10 @@ namespace RealityCheck.UI;
 
 public class TaxNoticeMenu : IClickableMenu
 {
-    private const int BusinessPropertyTaxThreshold = 20;
-
-    private const int KegDailyTax = 48;
-    private const int PreservesJarDailyTax = 64;
-    private const int CaskDailyTax = 8;
-    private const int BeeHouseDailyTax = 34;
-    private const int MayonnaiseMachineDailyTax = 260;
-    private const int CheesePressDailyTax = 51;
-    private const int LoomDailyTax = 26;
-    private const int OilMakerDailyTax = 88;
-    private const int DehydratorDailyTax = 380;
-    private const int FishSmokerDailyTax = 137;
 
     private readonly LedgerService ledgerService;
     private readonly TaxRecord record;
+    private readonly TaxConfig taxConfig;
 
     private readonly List<NoticeElement> elements = new();
 
@@ -45,7 +35,8 @@ public class TaxNoticeMenu : IClickableMenu
 
     public TaxNoticeMenu(
         LedgerService ledgerService,
-        TaxRecord record
+        TaxRecord record,
+        TaxConfig? taxConfig = null
     )
         : base(
             Game1.uiViewport.Width / 2 - 480,
@@ -57,6 +48,7 @@ public class TaxNoticeMenu : IClickableMenu
     {
         this.ledgerService = ledgerService;
         this.record = record;
+        this.taxConfig = taxConfig ?? ConfigService.Current.Tax;
 
         this.closeButtonBounds = new Rectangle(
             this.xPositionOnScreen + this.width - 70,
@@ -79,7 +71,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         if (this.closeButtonBounds.Contains(x, y))
         {
-            if (!this.isSigned)
+            if (this.taxConfig.RequireTaxNoticeSignature && !this.isSigned)
             {
                 this.showSignatureRequiredWarning = true;
                 this.contentHeight = this.CalculateContentHeight();
@@ -687,7 +679,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Keg",
             assessments,
             a => a.KegCount,
-            KegDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.Keg
         );
 
         this.AddBusinessMachineLine(
@@ -695,7 +687,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Preserves Jar",
             assessments,
             a => a.PreservesJarCount,
-            PreservesJarDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.PreservesJar
         );
 
         this.AddBusinessMachineLine(
@@ -703,7 +695,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Cask",
             assessments,
             a => a.CaskCount,
-            CaskDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.Cask
         );
 
         this.AddBusinessMachineLine(
@@ -711,7 +703,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Bee House",
             assessments,
             a => a.BeeHouseCount,
-            BeeHouseDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.BeeHouse
         );
 
         this.AddBusinessMachineLine(
@@ -719,7 +711,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Mayonnaise Machine",
             assessments,
             a => a.MayonnaiseMachineCount,
-            MayonnaiseMachineDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.MayonnaiseMachine
         );
 
         this.AddBusinessMachineLine(
@@ -727,7 +719,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Cheese Press",
             assessments,
             a => a.CheesePressCount,
-            CheesePressDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.CheesePress
         );
 
         this.AddBusinessMachineLine(
@@ -735,7 +727,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Loom",
             assessments,
             a => a.LoomCount,
-            LoomDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.Loom
         );
 
         this.AddBusinessMachineLine(
@@ -743,7 +735,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Oil Maker",
             assessments,
             a => a.OilMakerCount,
-            OilMakerDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.OilMaker
         );
 
         this.AddBusinessMachineLine(
@@ -751,7 +743,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Dehydrator",
             assessments,
             a => a.DehydratorCount,
-            DehydratorDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.Dehydrator
         );
 
         this.AddBusinessMachineLine(
@@ -759,7 +751,7 @@ public class TaxNoticeMenu : IClickableMenu
             "Fish Smoker",
             assessments,
             a => a.FishSmokerCount,
-            FishSmokerDailyTax
+            this.taxConfig.BusinessPropertyDailyTaxRates.FishSmoker
         );
 
         if (businessLines.Count == 0)
@@ -841,7 +833,7 @@ public class TaxNoticeMenu : IClickableMenu
 
     private int GetTaxableBusinessPropertyCount(int count)
     {
-        if (count <= BusinessPropertyTaxThreshold)
+        if (count <= this.taxConfig.BusinessPropertyTaxThreshold)
             return 0;
 
         return count;

@@ -9,17 +9,22 @@ public class TaxEvents
 {
     private readonly TaxService taxService;
     private readonly TaxNoticeService taxNoticeService;
+    private readonly ConfigService configService;
     private readonly IMonitor monitor;
 
     public TaxEvents(
         LedgerService ledgerService,
         IModHelper helper,
-        IMonitor monitor
+        IMonitor monitor,
+        ConfigService configService
     )
     {
+        this.configService = configService;
+
         this.taxService = new TaxService(
             ledgerService,
-            monitor
+            monitor,
+            this.configService.Config.Tax
         );
 
         this.taxNoticeService = new TaxNoticeService(
@@ -50,7 +55,9 @@ public class TaxEvents
             );
         }
 
-        if (settled && this.taxService.LastSettledTaxRecord != null)
+        if (settled
+            && this.taxService.LastSettledTaxRecord != null
+            && this.configService.Config.Tax.EnableTaxNoticeMail)
         {
             TaxRecord record = this.taxService.LastSettledTaxRecord;
 

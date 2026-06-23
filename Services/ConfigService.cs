@@ -1,3 +1,4 @@
+using System.Linq;
 using RealityCheck.Data;
 using StardewModdingAPI;
 
@@ -7,6 +8,8 @@ public class ConfigService
 {
     private readonly IModHelper helper;
     private readonly IMonitor monitor;
+
+    public static ModConfig Current { get; private set; } = new();
 
     public ModConfig Config { get; private set; } = new();
 
@@ -25,6 +28,8 @@ public class ConfigService
 
         this.EnsureDefaults();
 
+        Current = this.Config;
+
         this.helper.WriteConfig(this.Config);
 
         this.monitor.Log(
@@ -41,6 +46,9 @@ public class ConfigService
         this.Config.Tax.IncomeTaxBrackets ??= new();
         this.Config.Tax.PropertyTax ??= new PropertyTaxConfig();
 
+        if (this.Config.Tax.BusinessPropertyTaxThreshold <= 0)
+            this.Config.Tax.BusinessPropertyTaxThreshold = 20;
+
         if (this.Config.Tax.IncomeTaxBrackets.Count == 0)
         {
             this.Config.Tax.IncomeTaxBrackets.Add(
@@ -51,5 +59,9 @@ public class ConfigService
                 }
             );
         }
+
+        this.Config.Tax.IncomeTaxBrackets = this.Config.Tax.IncomeTaxBrackets
+            .OrderBy(b => b.MinimumTaxableIncome)
+            .ToList();
     }
 }

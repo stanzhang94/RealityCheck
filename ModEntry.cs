@@ -6,6 +6,8 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using HarmonyLib;
 using RealityCheck.Patches;
+using System.Linq;
+using RealityCheck.Models;
 
 namespace RealityCheck;
 
@@ -95,6 +97,29 @@ public class ModEntry : Mod
         {
             this.ledgerService!.Clear();
         }
+        if (e.Button == SButton.U)
+{
+        if (!Context.IsWorldReady || this.ledgerService is null)
+            return;
+
+        TaxRecord? latestTaxRecord = this.ledgerService
+            .GetTaxRecords()
+            .LastOrDefault();
+
+        if (latestTaxRecord is null)
+        {
+            Game1.showRedMessage("No tax notice available.");
+            return;
+        }
+
+        Game1.activeClickableMenu = new TaxNoticeMenu(
+            this.ledgerService,
+            latestTaxRecord
+        );
+
+        Game1.playSound("bigSelect");
+        return;
+}
 
     }
 }

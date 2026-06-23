@@ -10,7 +10,7 @@ namespace RealityCheck.Services;
 
 public class LedgerService
 {
-    private const string DataPath = "data/save-data.json";
+    private const string SaveDataKey = "save-data";
 
     private readonly IModHelper helper;
     private readonly IMonitor monitor;
@@ -18,6 +18,8 @@ public class LedgerService
     private SaveData data;
 
     private int suppressedExpenseAmount = 0;
+
+    private string? loadedSaveId = null;
 
     public LedgerService(IModHelper helper, IMonitor monitor)
     {
@@ -31,38 +33,60 @@ public class LedgerService
 
     public void Load()
     {
+        if (!Context.IsWorldReady)
+        {
+            this.data = new SaveData();
+            this.loadedSaveId = null;
+            this.suppressedExpenseAmount = 0;
+
+            this.monitor.Log(
+                "Ledger initialized before save data was ready.",
+                LogLevel.Trace
+            );
+
+            return;
+        }
+
         this.data =
-            this.helper.Data.ReadJsonFile<SaveData>(DataPath)
+            this.helper.Data.ReadSaveData<SaveData>(SaveDataKey)
             ?? new SaveData();
 
-        this.data.Ledger ??= new List<LedgerEntry>();
-        this.data.TaxRecords ??= new List<TaxRecord>();
-        this.data.PropertyTaxDailyAssessments ??= new List<PropertyTaxDailyAssessment>();
-        this.data.BusinessPropertyTaxDailyAssessments ??= new List<BusinessPropertyTaxDailyAssessment>();
+        this.EnsureCollections();
+
+        this.loadedSaveId = this.GetCurrentSaveId();
+        this.suppressedExpenseAmount = 0;
 
         this.monitor.Log(
-            "Ledger loaded from JSON.",
+            $"Ledger loaded from save data for save {this.loadedSaveId}.",
             LogLevel.Trace
         );
     }
 
     public List<LedgerEntry> GetEntries()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.Ledger;
     }
 
     public List<TaxRecord> GetTaxRecords()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.TaxRecords;
     }
 
     public List<PropertyTaxDailyAssessment> GetPropertyTaxDailyAssessments()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.PropertyTaxDailyAssessments;
     }
 
     public List<BusinessPropertyTaxDailyAssessment> GetBusinessPropertyTaxDailyAssessments()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.BusinessPropertyTaxDailyAssessments;
     }
 
@@ -72,6 +96,8 @@ public class LedgerService
         int day
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.PropertyTaxDailyAssessments.Any(a =>
             a.Year == year
             && a.Season == season
@@ -85,6 +111,8 @@ public class LedgerService
         int day
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.BusinessPropertyTaxDailyAssessments.Any(a =>
             a.Year == year
             && a.Season == season
@@ -96,6 +124,8 @@ public class LedgerService
         PropertyTaxDailyAssessment assessment
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (this.HasPropertyTaxDailyAssessment(
             assessment.Year,
             assessment.Season,
@@ -117,6 +147,8 @@ public class LedgerService
         BusinessPropertyTaxDailyAssessment assessment
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (this.HasBusinessPropertyTaxDailyAssessment(
             assessment.Year,
             assessment.Season,
@@ -136,6 +168,8 @@ public class LedgerService
 
     public void AddTaxRecord(TaxRecord record)
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (record.TotalTaxAmount <= 0)
             return;
 
@@ -149,12 +183,46 @@ public class LedgerService
 
     public int GetOutstandingBalance()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return this.data.OutstandingBalance;
     }
 
     public int GetEffectiveBalance()
     {
+        this.EnsureLoadedForCurrentSave();
+
         return Game1.player.Money - this.data.OutstandingBalance;
+    }
+
+    public bool IsTaxNoticeSigned(string noticeId)
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (string.IsNullOrWhiteSpace(noticeId))
+            return false;
+
+        return this.data.SignedTaxNoticeIds.Contains(noticeId);
+    }
+
+    public void SignTaxNotice(string noticeId)
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (string.IsNullOrWhiteSpace(noticeId))
+            return;
+
+        if (this.data.SignedTaxNoticeIds.Contains(noticeId))
+            return;
+
+        this.data.SignedTaxNoticeIds.Add(noticeId);
+
+        this.Save();
+
+        this.monitor.Log(
+            $"Tax notice signed: {noticeId}",
+            LogLevel.Info
+        );
     }
 
     public void AddIncome(
@@ -165,6 +233,8 @@ public class LedgerService
         string itemId = ""
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return;
 
@@ -198,6 +268,8 @@ public class LedgerService
         string itemId = ""
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return;
 
@@ -229,6 +301,8 @@ public class LedgerService
         int amount
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return;
 
@@ -260,6 +334,8 @@ public class LedgerService
         int amount
     )
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return;
 
@@ -308,6 +384,8 @@ public class LedgerService
 
     public void AddOutstandingBalance(int amount)
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return;
 
@@ -316,6 +394,8 @@ public class LedgerService
 
     public int ReduceOutstandingBalance(int amount)
     {
+        this.EnsureLoadedForCurrentSave();
+
         if (amount <= 0)
             return 0;
 
@@ -357,31 +437,66 @@ public class LedgerService
 
     public void Clear()
     {
+        this.EnsureLoadedForCurrentSave();
+
         this.data.Ledger.Clear();
         this.data.TaxRecords.Clear();
         this.data.PropertyTaxDailyAssessments.Clear();
         this.data.BusinessPropertyTaxDailyAssessments.Clear();
+        this.data.SignedTaxNoticeIds.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
 
         this.Save();
 
         this.monitor.Log(
-            "Ledger, tax records, tax assessments, and outstanding balance cleared.",
+            "Ledger, tax records, tax assessments, signed tax notices, and outstanding balance cleared for current save.",
             LogLevel.Info
         );
     }
 
     public void Save()
     {
-        this.helper.Data.WriteJsonFile(
-            DataPath,
+        if (!Context.IsWorldReady)
+            return;
+
+        this.EnsureLoadedForCurrentSave();
+
+        this.helper.Data.WriteSaveData(
+            SaveDataKey,
             this.data
         );
 
         this.monitor.Log(
-            "Ledger saved to JSON.",
+            $"Ledger saved to save data for save {this.loadedSaveId}.",
             LogLevel.Trace
         );
+    }
+
+    private void EnsureLoadedForCurrentSave()
+    {
+        if (!Context.IsWorldReady)
+            return;
+
+        string currentSaveId = this.GetCurrentSaveId();
+
+        if (this.loadedSaveId == currentSaveId)
+            return;
+
+        this.Load();
+    }
+
+    private void EnsureCollections()
+    {
+        this.data.Ledger ??= new List<LedgerEntry>();
+        this.data.TaxRecords ??= new List<TaxRecord>();
+        this.data.PropertyTaxDailyAssessments ??= new List<PropertyTaxDailyAssessment>();
+        this.data.BusinessPropertyTaxDailyAssessments ??= new List<BusinessPropertyTaxDailyAssessment>();
+        this.data.SignedTaxNoticeIds ??= new List<string>();
+    }
+
+    private string GetCurrentSaveId()
+    {
+        return Game1.uniqueIDForThisGame.ToString();
     }
 }

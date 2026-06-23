@@ -1,7 +1,5 @@
-using System.Linq;
 using HarmonyLib;
 using RealityCheck.Events;
-using RealityCheck.Models;
 using RealityCheck.Patches;
 using RealityCheck.Services;
 using RealityCheck.UI;
@@ -109,40 +107,6 @@ public class ModEntry : Mod
             Game1.activeClickableMenu = new FinanceMenu(
                 this.ledgerService,
                 this.analyticsService
-            );
-
-            Game1.playSound("bigSelect");
-
-            return;
-        }
-
-        if (e.Button == SButton.R)
-        {
-            this.ledgerService?.Clear();
-
-            return;
-        }
-
-        // Temporary test hotkey for opening the latest custom tax notice.
-        // Remove this after the mail bridge is fully confirmed.
-        if (e.Button == SButton.U)
-        {
-            if (this.ledgerService is null)
-                return;
-
-            TaxRecord? latestTaxRecord = this.ledgerService
-                .GetTaxRecords()
-                .LastOrDefault();
-
-            if (latestTaxRecord is null)
-            {
-                Game1.showRedMessage("No tax notice available.");
-                return;
-            }
-
-            Game1.activeClickableMenu = new TaxNoticeMenu(
-                this.ledgerService,
-                latestTaxRecord
             );
 
             Game1.playSound("bigSelect");

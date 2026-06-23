@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using RealityCheck.Models;
 using RealityCheck.Services;
 using StardewValley;
@@ -36,10 +37,11 @@ public class TaxNoticeMenu : IClickableMenu
     private int contentTop;
     private int contentBottom;
 
-    private Rectangle signatureClickBounds = Rectangle.Empty;
-    private bool isSigned = false;
-
     private readonly Rectangle closeButtonBounds;
+    private Rectangle signatureClickBounds = Rectangle.Empty;
+
+    private bool isSigned = false;
+    private bool showSignatureRequiredWarning = false;
 
     public TaxNoticeMenu(
         LedgerService ledgerService,
@@ -77,14 +79,27 @@ public class TaxNoticeMenu : IClickableMenu
 
         if (this.closeButtonBounds.Contains(x, y))
         {
+            if (!this.isSigned)
+            {
+                this.showSignatureRequiredWarning = true;
+                this.contentHeight = this.CalculateContentHeight();
+                this.scrollOffset = this.GetMaxScrollOffset();
+
+                Game1.playSound("cancel");
+
+                return;
+            }
+
             Game1.playSound("bigDeSelect");
             Game1.exitActiveMenu();
+
             return;
         }
 
         if (!this.isSigned && this.signatureClickBounds.Contains(x, y))
         {
             this.isSigned = true;
+            this.showSignatureRequiredWarning = false;
 
             this.ledgerService.SignTaxNotice(
                 this.GetTaxNoticeId()
@@ -94,8 +109,23 @@ public class TaxNoticeMenu : IClickableMenu
             this.contentHeight = this.CalculateContentHeight();
 
             Game1.playSound("coin");
+
             return;
         }
+    }
+
+    public override void receiveKeyPress(Keys key)
+    {
+        // Emergency exit only. The close button still requires signature.
+        if (key == Keys.Escape)
+        {
+            Game1.playSound("bigDeSelect");
+            Game1.exitActiveMenu();
+
+            return;
+        }
+
+        base.receiveKeyPress(key);
     }
 
     public override void receiveScrollWheelAction(int direction)
@@ -163,7 +193,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         foreach (NoticeElement element in this.elements)
         {
-            if (element.IsDivider)
+            if (element.Kind == NoticeElementKind.Divider)
             {
                 int dividerY = y + element.TopPadding + 6;
 
@@ -185,22 +215,17 @@ public class TaxNoticeMenu : IClickableMenu
                 continue;
             }
 
-            if (element.IsSignatureBlock)
+            if (element.Kind == NoticeElementKind.SignatureBlock)
             {
-                int blockTop = y + element.TopPadding;
-                int blockHeight = element.FixedHeight;
+                int blockHeight = this.DrawSignatureBlock(
+                    b,
+                    contentLeft,
+                    contentRight,
+                    y
+                );
 
-                if (blockTop + blockHeight >= this.contentTop && blockTop <= this.contentBottom)
-                {
-                    this.DrawSignatureBlock(
-                        b,
-                        contentLeft,
-                        contentRight,
-                        blockTop
-                    );
-                }
+                y += blockHeight;
 
-                y += element.TopPadding + blockHeight + element.BottomPadding;
                 continue;
             }
 
@@ -243,6 +268,140 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.DrawScrollHint(b, paperRect);
         this.drawMouse(b);
+    }
+
+    private int DrawSignatureBlock(
+        SpriteBatch b,
+        int contentLeft,
+        int contentRight,
+        int y
+    )
+    {
+        Color labelColor = new Color(85, 60, 40);
+        Color signatureColor = new Color(25, 25, 25);
+        Color hintColor = new Color(135, 45, 45);
+        Color lineColor = new Color(120, 90, 60);
+
+        int topPadding = 0;
+        int bottomPadding = 28;
+        int blockCoreHeight = this.showSignatureRequiredWarning ? 82 : 58;
+
+        float labelScale = 0.82f;
+        float nameScale = 0.96f;
+        float hintScale = 0.72f;
+        float warningScale = 0.76f;
+
+        float labelX = contentLeft;
+        float labelY = y + topPadding;
+
+        string label = "Authorized Signature:";
+        Vector2 labelSize = Game1.smallFont.MeasureString(label) * labelScale;
+
+        int lineX = contentLeft + 255;
+        int lineY = (int)labelY + 28;
+        int lineWidth = Math.Max(
+            260,
+            contentRight - lineX - 190
+        );
+
+        int lineHeight = 2;
+
+        if (labelY + blockCoreHeight >= this.contentTop
+            && labelY <= this.contentBottom)
+        {
+            b.DrawString(
+                Game1.smallFont,
+                label,
+                new Vector2(labelX, labelY),
+                labelColor,
+                0f,
+                Vector2.Zero,
+                labelScale,
+                SpriteEffects.None,
+                0.86f
+            );
+
+            b.Draw(
+                Game1.staminaRect,
+                new Rectangle(
+                    lineX,
+                    lineY,
+                    lineWidth,
+                    lineHeight
+                ),
+                lineColor
+            );
+
+            if (this.isSigned)
+            {
+                string signatureName = this.GetPlayerSignatureName();
+                Vector2 nameSize = Game1.smallFont.MeasureString(signatureName) * nameScale;
+
+                float nameX = lineX + (lineWidth - nameSize.X) / 2f;
+                float nameY = labelY - 2;
+
+                b.DrawString(
+                    Game1.smallFont,
+                    signatureName,
+                    new Vector2(nameX, nameY),
+                    signatureColor,
+                    0f,
+                    Vector2.Zero,
+                    nameScale,
+                    SpriteEffects.None,
+                    0.87f
+                );
+            }
+            else
+            {
+                string hint = "Click to sign";
+                Vector2 hintSize = Game1.smallFont.MeasureString(hint) * hintScale;
+
+                b.DrawString(
+                    Game1.smallFont,
+                    hint,
+                    new Vector2(
+                        lineX + lineWidth + 18,
+                        labelY + 10
+                    ),
+                    hintColor,
+                    0f,
+                    Vector2.Zero,
+                    hintScale,
+                    SpriteEffects.None,
+                    0.87f
+                );
+
+                if (this.showSignatureRequiredWarning)
+                {
+                    string warning = "Signature required before this notice can be closed.";
+
+                    b.DrawString(
+                        Game1.smallFont,
+                        warning,
+                        new Vector2(
+                            lineX,
+                            lineY + 14
+                        ),
+                        hintColor,
+                        0f,
+                        Vector2.Zero,
+                        warningScale,
+                        SpriteEffects.None,
+                        0.87f
+                    );
+                }
+
+                this.signatureClickBounds = new Rectangle(
+                    lineX - 12,
+                    (int)labelY - 6,
+                    lineWidth + 175,
+                    52
+                );
+            }
+        }
+
+        return topPadding + blockCoreHeight + bottomPadding;
     }
 
     private void DrawCloseButton(SpriteBatch b)
@@ -289,111 +448,6 @@ public class TaxNoticeMenu : IClickableMenu
             SpriteEffects.None,
             0.87f
         );
-    }
-
-    private void DrawSignatureBlock(
-        SpriteBatch b,
-        int contentLeft,
-        int contentRight,
-        int y
-    )
-    {
-        Color darkBrown = new Color(85, 60, 40);
-        Color midBrown = new Color(110, 80, 55);
-        Color inkBlack = new Color(25, 25, 25);
-
-        string label = "Authorized Signature:";
-
-        Vector2 labelPosition = new Vector2(
-            contentLeft,
-            y + 6
-        );
-
-        b.DrawString(
-            Game1.smallFont,
-            label,
-            labelPosition,
-            darkBrown,
-            0f,
-            Vector2.Zero,
-            0.82f,
-            SpriteEffects.None,
-            0.86f
-        );
-
-        float labelWidth = Game1.smallFont.MeasureString(label).X * 0.82f;
-
-        int lineStartX = contentLeft + (int)labelWidth + 32;
-        int lineEndX = Math.Min(
-            contentRight - 260,
-            lineStartX + 360
-        );
-
-        if (lineEndX <= lineStartX + 120)
-            lineEndX = contentRight - 160;
-
-        int lineY = y + 33;
-
-        b.Draw(
-            Game1.staminaRect,
-            new Rectangle(
-                lineStartX,
-                lineY,
-                lineEndX - lineStartX,
-                2
-            ),
-            new Color(120, 90, 60)
-        );
-
-        this.signatureClickBounds = new Rectangle(
-            lineStartX - 12,
-            y,
-            lineEndX - lineStartX + 180,
-            52
-        );
-
-        if (this.isSigned)
-        {
-            string signatureName = this.GetPlayerSignatureName();
-            float signatureScale = 0.96f;
-            Vector2 signatureSize = Game1.smallFont.MeasureString(signatureName) * signatureScale;
-
-            float signatureX = lineStartX + ((lineEndX - lineStartX) - signatureSize.X) / 2f;
-            float signatureY = y + 2;
-
-            b.DrawString(
-                Game1.smallFont,
-                signatureName,
-                new Vector2(signatureX, signatureY),
-                inkBlack,
-                0f,
-                Vector2.Zero,
-                signatureScale,
-                SpriteEffects.None,
-                0.87f
-            );
-        }
-        else
-        {
-            string hint = "Click to sign";
-            float hintScale = 0.72f;
-            Vector2 hintSize = Game1.smallFont.MeasureString(hint) * hintScale;
-
-            b.DrawString(
-                Game1.smallFont,
-                hint,
-                new Vector2(
-                    lineEndX + 18,
-                    y + 12
-                ),
-                midBrown,
-                0f,
-                Vector2.Zero,
-                hintScale,
-                SpriteEffects.None,
-                0.87f
-            );
-        }
     }
 
     private void BuildDocument()
@@ -510,10 +564,7 @@ public class TaxNoticeMenu : IClickableMenu
             18
         );
 
-        this.AddSignatureBlock(
-            topPadding: 0,
-            bottomPadding: 28
-        );
+        this.AddSignatureBlock();
 
         this.AddText(
             "OFFICIAL SEAL",
@@ -631,16 +682,85 @@ public class TaxNoticeMenu : IClickableMenu
 
         var businessLines = new List<string>();
 
-        this.AddBusinessMachineLine(businessLines, "Keg", assessments, a => a.KegCount, KegDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Preserves Jar", assessments, a => a.PreservesJarCount, PreservesJarDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Cask", assessments, a => a.CaskCount, CaskDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Bee House", assessments, a => a.BeeHouseCount, BeeHouseDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Mayonnaise Machine", assessments, a => a.MayonnaiseMachineCount, MayonnaiseMachineDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Cheese Press", assessments, a => a.CheesePressCount, CheesePressDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Loom", assessments, a => a.LoomCount, LoomDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Oil Maker", assessments, a => a.OilMakerCount, OilMakerDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Dehydrator", assessments, a => a.DehydratorCount, DehydratorDailyTax);
-        this.AddBusinessMachineLine(businessLines, "Fish Smoker", assessments, a => a.FishSmokerCount, FishSmokerDailyTax);
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Keg",
+            assessments,
+            a => a.KegCount,
+            KegDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Preserves Jar",
+            assessments,
+            a => a.PreservesJarCount,
+            PreservesJarDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Cask",
+            assessments,
+            a => a.CaskCount,
+            CaskDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Bee House",
+            assessments,
+            a => a.BeeHouseCount,
+            BeeHouseDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Mayonnaise Machine",
+            assessments,
+            a => a.MayonnaiseMachineCount,
+            MayonnaiseMachineDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Cheese Press",
+            assessments,
+            a => a.CheesePressCount,
+            CheesePressDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Loom",
+            assessments,
+            a => a.LoomCount,
+            LoomDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Oil Maker",
+            assessments,
+            a => a.OilMakerCount,
+            OilMakerDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Dehydrator",
+            assessments,
+            a => a.DehydratorCount,
+            DehydratorDailyTax
+        );
+
+        this.AddBusinessMachineLine(
+            businessLines,
+            "Fish Smoker",
+            assessments,
+            a => a.FishSmokerCount,
+            FishSmokerDailyTax
+        );
 
         if (businessLines.Count == 0)
         {
@@ -740,7 +860,11 @@ public class TaxNoticeMenu : IClickableMenu
         );
     }
 
-    private void AddBodyLine(string text, Color color, int bottomPadding = 4)
+    private void AddBodyLine(
+        string text,
+        Color color,
+        int bottomPadding = 4
+    )
     {
         this.AddText(
             text,
@@ -772,9 +896,7 @@ public class TaxNoticeMenu : IClickableMenu
             UseDialogueFont = useDialogueFont,
             TopPadding = topPadding,
             BottomPadding = bottomPadding,
-            IsDivider = false,
-            IsSignatureBlock = false,
-            FixedHeight = 0
+            Kind = NoticeElementKind.Text
         });
     }
 
@@ -789,13 +911,11 @@ public class TaxNoticeMenu : IClickableMenu
             UseDialogueFont = false,
             TopPadding = topPadding,
             BottomPadding = bottomPadding,
-            IsDivider = true,
-            IsSignatureBlock = false,
-            FixedHeight = 0
+            Kind = NoticeElementKind.Divider
         });
     }
 
-    private void AddSignatureBlock(int topPadding, int bottomPadding)
+    private void AddSignatureBlock()
     {
         this.elements.Add(new NoticeElement
         {
@@ -804,11 +924,9 @@ public class TaxNoticeMenu : IClickableMenu
             Color = Color.White,
             Alignment = TextAlignment.Left,
             UseDialogueFont = false,
-            TopPadding = topPadding,
-            BottomPadding = bottomPadding,
-            IsDivider = false,
-            IsSignatureBlock = true,
-            FixedHeight = 54
+            TopPadding = 0,
+            BottomPadding = 0,
+            Kind = NoticeElementKind.SignatureBlock
         });
     }
 
@@ -818,15 +936,15 @@ public class TaxNoticeMenu : IClickableMenu
 
         foreach (NoticeElement element in this.elements)
         {
-            if (element.IsDivider)
+            if (element.Kind == NoticeElementKind.Divider)
             {
                 total += element.TopPadding + 14 + element.BottomPadding;
                 continue;
             }
 
-            if (element.IsSignatureBlock)
+            if (element.Kind == NoticeElementKind.SignatureBlock)
             {
-                total += element.TopPadding + element.FixedHeight + element.BottomPadding;
+                total += this.GetSignatureBlockHeight();
                 continue;
             }
 
@@ -840,6 +958,15 @@ public class TaxNoticeMenu : IClickableMenu
         }
 
         return total;
+    }
+
+    private int GetSignatureBlockHeight()
+    {
+        int topPadding = 0;
+        int bottomPadding = 28;
+        int blockCoreHeight = this.showSignatureRequiredWarning ? 82 : 58;
+
+        return topPadding + blockCoreHeight + bottomPadding;
     }
 
     private int GetMaxScrollOffset()
@@ -913,6 +1040,13 @@ public class TaxNoticeMenu : IClickableMenu
         Right
     }
 
+    private enum NoticeElementKind
+    {
+        Text,
+        Divider,
+        SignatureBlock
+    }
+
     private class NoticeElement
     {
         public string Text { get; set; } = "";
@@ -922,9 +1056,7 @@ public class TaxNoticeMenu : IClickableMenu
         public bool UseDialogueFont { get; set; }
         public int TopPadding { get; set; }
         public int BottomPadding { get; set; }
-        public bool IsDivider { get; set; }
-        public bool IsSignatureBlock { get; set; }
-        public int FixedHeight { get; set; }
+        public NoticeElementKind Kind { get; set; }
     }
 
     private class BusinessMachineGroup

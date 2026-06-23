@@ -667,68 +667,67 @@ public class TaxService
        return count;
    }
  
-   private void LogBusinessPropertyTaxScan(
-       BusinessPropertyTaxDailyAssessment assessment,
-       List<string> locationLogLines
-   )
-   {
-       if (this.monitor == null)
-           return;
- 
-       this.monitor.Log(
-           "=== Reality Check Business Property Tax Scan ===",
-           LogLevel.Info
-       );
- 
-       this.monitor.Log(
-           $"Date: Year {assessment.Year} {assessment.Season} {assessment.Day}",
-           LogLevel.Info
-       );
- 
-       if (locationLogLines.Count == 0)
-       {
-           this.monitor.Log(
-               "No taxable business machines found in scanned locations.",
-               LogLevel.Info
-           );
-       }
-       else
-       {
-           foreach (string line in locationLogLines)
-           {
-               this.monitor.Log(
-                   line,
-                   LogLevel.Info
-               );
-           }
-       }
- 
-       this.monitor.Log(
-           "Totals: " +
-           $"Keg {assessment.KegCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.KegCount)}, " +
-           $"Jar {assessment.PreservesJarCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount)}, " +
-           $"Cask {assessment.CaskCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CaskCount)}, " +
-           $"Bee {assessment.BeeHouseCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount)}, " +
-           $"Mayo {assessment.MayonnaiseMachineCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount)}, " +
-           $"Cheese {assessment.CheesePressCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount)}, " +
-           $"Loom {assessment.LoomCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.LoomCount)}, " +
-           $"Oil {assessment.OilMakerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount)}, " +
-           $"Dehydrator {assessment.DehydratorCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount)}, " +
-           $"Smoker {assessment.FishSmokerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount)}",
-           LogLevel.Info
-       );
- 
-       this.monitor.Log(
-           $"Business Property Tax Total Today: {assessment.TotalBusinessPropertyTaxAmount}g",
-           LogLevel.Info
-       );
- 
-       this.monitor.Log(
-           "==============================================",
-           LogLevel.Info
-       );
-   }
- 
+private void LogBusinessPropertyTaxScan(
+    BusinessPropertyTaxDailyAssessment assessment,
+    List<string> locationLogLines
+)
+{
+    if (this.monitor == null)
+        return;
+
+    this.monitor.Log(
+        "=== Reality Check Business Property Tax Scan ===",
+        LogLevel.Trace
+    );
+
+    this.monitor.Log(
+        $"Date: Year {assessment.Year} {assessment.Season} {assessment.Day}",
+        LogLevel.Trace
+    );
+
+    if (locationLogLines.Count == 0)
+    {
+        this.monitor.Log(
+            "No taxable business machines found in scanned locations.",
+            LogLevel.Trace
+        );
+    }
+    else
+    {
+        foreach (string line in locationLogLines)
+        {
+            this.monitor.Log(
+                line,
+                LogLevel.Trace
+            );
+        }
+    }
+
+    this.monitor.Log(
+        "Totals: " +
+        $"Keg {assessment.KegCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.KegCount)}, " +
+        $"Jar {assessment.PreservesJarCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount)}, " +
+        $"Cask {assessment.CaskCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CaskCount)}, " +
+        $"Bee {assessment.BeeHouseCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount)}, " +
+        $"Mayo {assessment.MayonnaiseMachineCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount)}, " +
+        $"Cheese {assessment.CheesePressCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount)}, " +
+        $"Loom {assessment.LoomCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.LoomCount)}, " +
+        $"Oil {assessment.OilMakerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount)}, " +
+        $"Dehydrator {assessment.DehydratorCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount)}, " +
+        $"Smoker {assessment.FishSmokerCount} / taxable {this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount)}",
+        LogLevel.Trace
+    );
+
+    this.monitor.Log(
+        $"Business Property Tax Total Today: {assessment.TotalBusinessPropertyTaxAmount}g",
+        LogLevel.Trace
+    );
+
+    this.monitor.Log(
+        "==============================================",
+        LogLevel.Trace
+    );
+}
    private void AddFarmhouseAssessment(
        ref double replacementCost
    )

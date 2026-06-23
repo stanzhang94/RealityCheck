@@ -491,9 +491,6 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
         this.DrawLine(b, "Note: Direct merchant sales are treated as tax-free cash transactions.", x, y);
         y += 40;
 
-        this.DrawLine(b, "Property Tax and Business Property Tax are coming soon.", x, y);
-        y += 45;
-
         this.UpdateContentHeight(y + 80);
     }
 

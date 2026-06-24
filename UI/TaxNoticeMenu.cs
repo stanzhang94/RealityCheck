@@ -815,23 +815,21 @@ public class TaxNoticeMenu : IClickableMenu
         if (groups.Count == 0)
             return;
 
-        int totalAmount = groups.Sum(g => g.Count * g.Days * dailyTax);
+        int totalAmount = groups.Sum(g => this.CalculateBusinessMachineGroupTax(g, dailyTax));
 
         string countSummary;
 
         if (groups.Count == 1)
         {
             BusinessMachineGroup g = groups[0];
-            countSummary = $"{g.Count} x {g.Days} x {dailyTax}g";
+            countSummary = this.BuildBusinessMachineGroupFormula(g, dailyTax);
         }
         else
         {
             countSummary = string.Join(
                 " & ",
-                groups.Select(g => $"{g.Count} x {g.Days}")
+                groups.Select(g => this.BuildBusinessMachineGroupFormula(g, dailyTax))
             );
-
-            countSummary = $"({countSummary}) x {dailyTax}g";
         }
 
         lines.Add($"{displayName}: {this.BuildFormulaResult(countSummary, this.FormatGold(totalAmount))}");
@@ -847,12 +845,44 @@ public class TaxNoticeMenu : IClickableMenu
         return " -> ";
     }
 
+    private int CalculateBusinessMachineGroupTax(BusinessMachineGroup group, int dailyTax)
+    {
+        double scaleMultiplier = this.GetBusinessPropertyTaxScaleMultiplier(group.Count);
+
+        return (int)Math.Round(
+            group.Count * group.Days * dailyTax * scaleMultiplier,
+            MidpointRounding.AwayFromZero
+        );
+    }
+
+    private string BuildBusinessMachineGroupFormula(BusinessMachineGroup group, int dailyTax)
+    {
+        double scaleMultiplier = this.GetBusinessPropertyTaxScaleMultiplier(group.Count);
+        string formula = $"{group.Count} x {group.Days} x {dailyTax}g";
+
+        if (scaleMultiplier != 1.0)
+            formula += $" x {scaleMultiplier.ToString("0.0", CultureInfo.InvariantCulture)}";
+
+        return formula;
+    }
+
     private int GetTaxableBusinessPropertyCount(int count)
     {
         if (count <= this.taxConfig.BusinessPropertyTaxThreshold)
             return 0;
 
         return count;
+    }
+
+    private double GetBusinessPropertyTaxScaleMultiplier(int count)
+    {
+        if (count >= 100)
+            return 2.0;
+
+        if (count >= 50)
+            return 1.5;
+
+        return 1.0;
     }
 
     private void AddSectionHeader(string text, Color color)

@@ -396,16 +396,16 @@ public class TaxService
        }
  
        assessment.TotalBusinessPropertyTaxAmount =
-           this.GetTaxableBusinessPropertyCount(assessment.KegCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Keg
-           + this.GetTaxableBusinessPropertyCount(assessment.PreservesJarCount) * this.taxConfig.BusinessPropertyDailyTaxRates.PreservesJar
-           + this.GetTaxableBusinessPropertyCount(assessment.CaskCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Cask
-           + this.GetTaxableBusinessPropertyCount(assessment.BeeHouseCount) * this.taxConfig.BusinessPropertyDailyTaxRates.BeeHouse
-           + this.GetTaxableBusinessPropertyCount(assessment.MayonnaiseMachineCount) * this.taxConfig.BusinessPropertyDailyTaxRates.MayonnaiseMachine
-           + this.GetTaxableBusinessPropertyCount(assessment.CheesePressCount) * this.taxConfig.BusinessPropertyDailyTaxRates.CheesePress
-           + this.GetTaxableBusinessPropertyCount(assessment.LoomCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Loom
-           + this.GetTaxableBusinessPropertyCount(assessment.OilMakerCount) * this.taxConfig.BusinessPropertyDailyTaxRates.OilMaker
-           + this.GetTaxableBusinessPropertyCount(assessment.DehydratorCount) * this.taxConfig.BusinessPropertyDailyTaxRates.Dehydrator
-           + this.GetTaxableBusinessPropertyCount(assessment.FishSmokerCount) * this.taxConfig.BusinessPropertyDailyTaxRates.FishSmoker;
+           this.CalculateBusinessPropertyDailyTax(assessment.KegCount, this.taxConfig.BusinessPropertyDailyTaxRates.Keg)
+           + this.CalculateBusinessPropertyDailyTax(assessment.PreservesJarCount, this.taxConfig.BusinessPropertyDailyTaxRates.PreservesJar)
+           + this.CalculateBusinessPropertyDailyTax(assessment.CaskCount, this.taxConfig.BusinessPropertyDailyTaxRates.Cask)
+           + this.CalculateBusinessPropertyDailyTax(assessment.BeeHouseCount, this.taxConfig.BusinessPropertyDailyTaxRates.BeeHouse)
+           + this.CalculateBusinessPropertyDailyTax(assessment.MayonnaiseMachineCount, this.taxConfig.BusinessPropertyDailyTaxRates.MayonnaiseMachine)
+           + this.CalculateBusinessPropertyDailyTax(assessment.CheesePressCount, this.taxConfig.BusinessPropertyDailyTaxRates.CheesePress)
+           + this.CalculateBusinessPropertyDailyTax(assessment.LoomCount, this.taxConfig.BusinessPropertyDailyTaxRates.Loom)
+           + this.CalculateBusinessPropertyDailyTax(assessment.OilMakerCount, this.taxConfig.BusinessPropertyDailyTaxRates.OilMaker)
+           + this.CalculateBusinessPropertyDailyTax(assessment.DehydratorCount, this.taxConfig.BusinessPropertyDailyTaxRates.Dehydrator)
+           + this.CalculateBusinessPropertyDailyTax(assessment.FishSmokerCount, this.taxConfig.BusinessPropertyDailyTaxRates.FishSmoker);
  
        this.LogBusinessPropertyTaxScan(
            assessment,
@@ -690,12 +690,38 @@ public class TaxService
        return true;
    }
  
+   private int CalculateBusinessPropertyDailyTax(int count, int dailyTaxRate)
+   {
+       int taxableCount = this.GetTaxableBusinessPropertyCount(count);
+
+       if (taxableCount <= 0)
+           return 0;
+
+       double scaleMultiplier = this.GetBusinessPropertyTaxScaleMultiplier(count);
+
+       return (int)Math.Round(
+           taxableCount * dailyTaxRate * scaleMultiplier,
+           MidpointRounding.AwayFromZero
+       );
+   }
+
    private int GetTaxableBusinessPropertyCount(int count)
    {
        if (count <= this.taxConfig.BusinessPropertyTaxThreshold)
            return 0;
- 
+
        return count;
+   }
+
+   private double GetBusinessPropertyTaxScaleMultiplier(int count)
+   {
+       if (count >= 100)
+           return 2.0;
+
+       if (count >= 50)
+           return 1.5;
+
+       return 1.0;
    }
  
 private void LogBusinessPropertyTaxScan(

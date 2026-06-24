@@ -320,7 +320,7 @@ this.DrawLine(b, I18n.Get("finance.seasonal_income", new { amount = $"{this.anal
         );
 
         this.DrawLine(b, I18n.Get("finance.income_trend"), x, y);
-        y += 50;
+        y += 75;
 
         var incomeTrend = this.analyticsService.GetSeasonDailyIncome();
 
@@ -334,7 +334,7 @@ this.DrawLine(b, I18n.Get("finance.seasonal_income", new { amount = $"{this.anal
         y += 330;
 
         this.DrawLine(b, I18n.Get("finance.expense_trend"), x, y);
-        y += 50;
+        y += 75;
 
         var expenseTrend = this.analyticsService.GetSeasonDailyExpense();
 
@@ -385,7 +385,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         );
 
         this.DrawLine(b, I18n.Get("finance.income_trend"), x, y);
-        y += 50;
+        y += 75;
 
         var incomeTrend = this.analyticsService.GetYearDailyIncome();
 
@@ -399,7 +399,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         y += 360;
 
         this.DrawLine(b, I18n.Get("finance.expense_trend"), x, y);
-        y += 50;
+        y += 75;
 
         var expenseTrend = this.analyticsService.GetYearDailyExpense();
 

@@ -51,7 +51,12 @@ public class TaxService
  
    public string GetCurrentTaxWeekLabel()
    {
-       return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekStartDay()} - {this.FormatSeason(Game1.currentSeason)} {this.GetCurrentTaxWeekEndDay()}";
+       return I18n.PeriodSameSeason(
+           Game1.year,
+           Game1.currentSeason,
+           this.GetCurrentTaxWeekStartDay(),
+           this.GetCurrentTaxWeekEndDay()
+       );
    }
  
    public string GetNextTaxSettlementLabel()
@@ -60,7 +65,15 @@ public class TaxService
  
        if (endDay < 28)
        {
-           return $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {endDay + 1} Morning";
+           return I18n.Get(
+               "date.morning",
+               new
+               {
+                   year = Game1.year,
+                   season = I18n.Season(Game1.currentSeason),
+                   day = endDay + 1
+               }
+           );
        }
  
        string nextSeason = this.GetNextSeason(Game1.currentSeason);
@@ -69,7 +82,15 @@ public class TaxService
        if (Game1.currentSeason == "winter")
            nextYear++;
  
-       return $"Year {nextYear} {this.FormatSeason(nextSeason)} 1 Morning";
+       return I18n.Get(
+           "date.morning",
+           new
+           {
+               year = nextYear,
+               season = I18n.Season(nextSeason),
+               day = 1
+           }
+       );
    }
  
    public int GetCurrentWeekTaxableShippingBinIncome()
@@ -530,16 +551,39 @@ public class TaxService
    public string GetTaxRecordSummaryLine(TaxRecord record)
    {
        string coveredPeriod =
-           $"Y{record.Year} {this.FormatSeason(record.Season)} {record.CoveredStartDay}-{record.CoveredEndDay}";
- 
+           I18n.Get(
+               "tax_history.covered_period",
+               new
+               {
+                   year = record.Year,
+                   season = I18n.Season(record.Season),
+                   startDay = record.CoveredStartDay,
+                   endDay = record.CoveredEndDay
+               }
+           );
+
        string settlementDate =
-           $"Y{record.SettlementYear} {this.FormatSeason(record.SettlementSeason)} {record.SettlementDay}";
- 
-       return
-           $"{coveredPeriod} -> {settlementDate}: " +
-           $"Income {this.FormatTaxAmount(record.IncomeTaxAmount)} | " +
-           $"Property {this.FormatTaxAmount(record.PropertyTaxAmount)} | " +
-           $"Business {this.FormatTaxAmount(record.BusinessPropertyTaxAmount)}";
+           I18n.Get(
+               "tax_history.settlement_date",
+               new
+               {
+                   year = record.SettlementYear,
+                   season = I18n.Season(record.SettlementSeason),
+                   day = record.SettlementDay
+               }
+           );
+
+       return I18n.Get(
+           "tax_history.summary_line",
+           new
+           {
+               coveredPeriod,
+               settlementDate,
+               income = this.FormatTaxAmount(record.IncomeTaxAmount),
+               property = this.FormatTaxAmount(record.PropertyTaxAmount),
+               business = this.FormatTaxAmount(record.BusinessPropertyTaxAmount)
+           }
+       );
    }
  
    public void AddTaxRecord(TaxRecord record)
@@ -1263,14 +1307,7 @@ private void LogBusinessPropertyTaxScan(
  
    private string FormatSeason(string season)
    {
-       return season switch
-       {
-           "spring" => "Spring",
-           "summer" => "Summer",
-           "fall" => "Fall",
-           "winter" => "Winter",
-           _ => season
-       };
+       return I18n.Season(season);
    }
  
    private string FormatTaxAmount(int amount)

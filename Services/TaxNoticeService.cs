@@ -132,28 +132,21 @@ public class TaxNoticeService
         {
             $"{TaxNoticeMarker}{mailId}",
             "",
-            "A formal weekly tax notice has been issued by the Pelican Town Revenue Service and the Pelican Town Property Assessment Office.",
+            I18n.Get("tax_mail.formal_notice_issued"),
             "",
-            $"Tax Period: Year {record.Year} {this.FormatSeason(record.Season)} {record.CoveredStartDay} - {this.FormatSeason(record.Season)} {record.CoveredEndDay}",
-            $"Settlement Date: Year {record.SettlementYear} {this.FormatSeason(record.SettlementSeason)} {record.SettlementDay}",
+            I18n.Get("tax_notice.tax_period", new { period = I18n.PeriodSameSeason(record.Year, record.Season, record.CoveredStartDay, record.CoveredEndDay) }),
+            I18n.Get("tax_notice.settlement_date", new { date = I18n.Date(record.SettlementYear, record.SettlementSeason, record.SettlementDay) }),
             "",
-            "Open this notice to view the full assessment document."
+            I18n.Get("tax_mail.open_notice")
         };
 
         string body = string.Join("^", lines);
 
-        return $"{body}[#]Joint Weekly Tax Notice";
+        return $"{body}[#]{I18n.Get("tax_notice.title")}";
     }
 
     private string FormatSeason(string season)
     {
-        return season switch
-        {
-            "spring" => "Spring",
-            "summer" => "Summer",
-            "fall" => "Fall",
-            "winter" => "Winter",
-            _ => season
-        };
+        return I18n.Season(season);
     }
 }

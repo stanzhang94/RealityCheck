@@ -129,7 +129,7 @@ public class FinanceMenu : IClickableMenu
 
         Utility.drawTextWithShadow(
             b,
-            "Reality Check",
+            I18n.Get("mod.name"),
             Game1.dialogueFont,
             new Vector2(x + 60, y + 105),
             Game1.textColor
@@ -199,7 +199,7 @@ public class FinanceMenu : IClickableMenu
 
     this.DrawLine(
         b,
-        $"Current Unpaid Balance: {this.FormatDebt(unpaidBalance)}",
+        I18n.Get("finance.current_unpaid_balance", new { amount = this.FormatDebt(unpaidBalance) }),
         x,
         y
     );
@@ -236,10 +236,10 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawTabs(SpriteBatch b)
     {
-        this.DrawTab(b, this.dailyTab, "Daily", this.currentTab == ReportTab.Daily);
-        this.DrawTab(b, this.seasonalTab, "Seasonal", this.currentTab == ReportTab.Seasonal);
-        this.DrawTab(b, this.annualTab, "Annual", this.currentTab == ReportTab.Annual);
-        this.DrawTab(b, this.taxTab, "Tax Report", this.currentTab == ReportTab.Tax);
+        this.DrawTab(b, this.dailyTab, I18n.Get("tab.daily"), this.currentTab == ReportTab.Daily);
+        this.DrawTab(b, this.seasonalTab, I18n.Get("tab.seasonal"), this.currentTab == ReportTab.Seasonal);
+        this.DrawTab(b, this.annualTab, I18n.Get("tab.annual"), this.currentTab == ReportTab.Annual);
+        this.DrawTab(b, this.taxTab, I18n.Get("tab.tax_report"), this.currentTab == ReportTab.Tax);
     }
 
     private void DrawTab(SpriteBatch b, Rectangle rect, string label, bool active)
@@ -266,25 +266,25 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawDailyReport(SpriteBatch b, int x, int y)
     {
-        this.DrawLine(b, $"Date: Year {Game1.year} {Game1.currentSeason} {Game1.dayOfMonth}", x, y);
+        this.DrawLine(b, I18n.Get("finance.date", new { date = I18n.Date(Game1.year, Game1.currentSeason, Game1.dayOfMonth) }), x, y);
         y += 45;
 
         y = this.DrawCurrentDebtSummary(b, x, y);
 
-        this.DrawLine(b, $"Today's Income: {this.analyticsService.GetTodayIncome()}g", x, y);
+        this.DrawLine(b, I18n.Get("finance.today_income", new { amount = $"{this.analyticsService.GetTodayIncome()}g" }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Today's Expenses: {this.FormatExpense(this.analyticsService.GetTodayExpense())}", x, y);
+        this.DrawLine(b, I18n.Get("finance.today_expenses", new { amount = this.FormatExpense(this.analyticsService.GetTodayExpense()) }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Today's Net: {this.analyticsService.GetTodayNet()}g", x, y);
+        this.DrawLine(b, I18n.Get("finance.today_net", new { amount = $"{this.analyticsService.GetTodayNet()}g" }), x, y);
         y += 55;
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            "Items Sold Today",
+            I18n.Get("finance.items_sold_today"),
             this.analyticsService.GetTodayItemSummaries(),
-            "Expense Breakdown",
+            I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetTodayExpenseBreakdown(),
             x,
             y
@@ -295,31 +295,31 @@ public class FinanceMenu : IClickableMenu
 
     private void DrawSeasonalReport(SpriteBatch b, int x, int y)
     {
-this.DrawLine(b, $"Season: Year {Game1.year} {Game1.currentSeason}", x, y);
+this.DrawLine(b, I18n.Get("finance.season", new { year = Game1.year, season = I18n.Season(Game1.currentSeason) }), x, y);
 y += 45;
 
 y = this.DrawCurrentDebtSummary(b, x, y);
 
-this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g", x, y);
+this.DrawLine(b, I18n.Get("finance.seasonal_income", new { amount = $"{this.analyticsService.GetSeasonIncome()}g" }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Seasonal Expenses: {this.FormatExpense(this.analyticsService.GetSeasonExpense())}", x, y);
+        this.DrawLine(b, I18n.Get("finance.seasonal_expenses", new { amount = this.FormatExpense(this.analyticsService.GetSeasonExpense()) }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Seasonal Net: {this.analyticsService.GetSeasonNet()}g", x, y);
+        this.DrawLine(b, I18n.Get("finance.seasonal_net", new { amount = $"{this.analyticsService.GetSeasonNet()}g" }), x, y);
         y += 55;
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            "Items Sold This Season",
+            I18n.Get("finance.items_sold_this_season"),
             this.analyticsService.GetSeasonItemSummaries(),
-            "Expense Breakdown",
+            I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetSeasonExpenseBreakdown(),
             x,
             y
         );
 
-        this.DrawLine(b, "Income Trend", x, y);
+        this.DrawLine(b, I18n.Get("finance.income_trend"), x, y);
         y += 50;
 
         var incomeTrend = this.analyticsService.GetSeasonDailyIncome();
@@ -333,7 +333,7 @@ this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g",
 
         y += 330;
 
-        this.DrawLine(b, "Expense Trend", x, y);
+        this.DrawLine(b, I18n.Get("finance.expense_trend"), x, y);
         y += 50;
 
         var expenseTrend = this.analyticsService.GetSeasonDailyExpense();
@@ -360,31 +360,31 @@ this.DrawLine(b, $"Seasonal Income: {this.analyticsService.GetSeasonIncome()}g",
 
     private void DrawAnnualReport(SpriteBatch b, int x, int y)
     {
-this.DrawLine(b, $"Year: {Game1.year}", x, y);
+this.DrawLine(b, I18n.Get("finance.year", new { year = Game1.year }), x, y);
 y += 45;
 
 y = this.DrawCurrentDebtSummary(b, x, y);
 
-this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, y);
+this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyticsService.GetYearIncome()}g" }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Annual Expenses: {this.FormatExpense(this.analyticsService.GetYearExpense())}", x, y);
+        this.DrawLine(b, I18n.Get("finance.annual_expenses", new { amount = this.FormatExpense(this.analyticsService.GetYearExpense()) }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Annual Net: {this.analyticsService.GetYearNet()}g", x, y);
+        this.DrawLine(b, I18n.Get("finance.annual_net", new { amount = $"{this.analyticsService.GetYearNet()}g" }), x, y);
         y += 55;
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            "Items Sold This Year",
+            I18n.Get("finance.items_sold_this_year"),
             this.analyticsService.GetYearItemSummaries(),
-            "Expense Breakdown",
+            I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetYearExpenseBreakdown(),
             x,
             y
         );
 
-        this.DrawLine(b, "Income Trend", x, y);
+        this.DrawLine(b, I18n.Get("finance.income_trend"), x, y);
         y += 50;
 
         var incomeTrend = this.analyticsService.GetYearDailyIncome();
@@ -398,7 +398,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         y += 360;
 
-        this.DrawLine(b, "Expense Trend", x, y);
+        this.DrawLine(b, I18n.Get("finance.expense_trend"), x, y);
         y += 50;
 
         var expenseTrend = this.analyticsService.GetYearDailyExpense();
@@ -425,50 +425,50 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
     private void DrawTaxReport(SpriteBatch b, int x, int y)
     {
-        this.DrawLine(b, "Tax Report", x, y);
+        this.DrawLine(b, I18n.Get("tab.tax_report"), x, y);
         y += 50;
 
-        this.DrawLine(b, $"Current Tax Week: {this.taxService.GetCurrentTaxWeekLabel()}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.current_tax_week", new { period = this.taxService.GetCurrentTaxWeekLabel() }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Next Tax Settlement: {this.taxService.GetNextTaxSettlementLabel()}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.next_tax_settlement", new { date = this.taxService.GetNextTaxSettlementLabel() }), x, y);
         y += 55;
 
-        this.DrawLine(b, "Income Tax", x, y);
+        this.DrawLine(b, I18n.Get("tax.income_tax"), x, y);
         y += 45;
 
-        this.DrawLine(b, $"Taxable Shipping Bin Income: {this.taxService.GetCurrentWeekTaxableShippingBinIncome()}g", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.taxable_shipping_bin_income", new { amount = $"{this.taxService.GetCurrentWeekTaxableShippingBinIncome()}g" }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Income Tax Bracket: {this.taxService.GetIncomeTaxBracketLabel()}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.income_tax_bracket", new { bracket = this.taxService.GetIncomeTaxBracketLabel() }), x, y);
         y += 35;
 
-        this.DrawLine(b, $"Estimated Income Tax: {this.FormatExpense(this.taxService.GetEstimatedIncomeTax())}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.estimated_income_tax", new { amount = this.FormatExpense(this.taxService.GetEstimatedIncomeTax()) }), x, y);
         y += 60;
 
-        this.DrawLine(b, "Property Tax", x, y);
+        this.DrawLine(b, I18n.Get("tax.property_tax"), x, y);
         y += 45;
 
-        this.DrawLine(b, $"Estimated Property Tax: {this.FormatExpense(this.taxService.GetEstimatedPropertyTax())}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.estimated_property_tax", new { amount = this.FormatExpense(this.taxService.GetEstimatedPropertyTax()) }), x, y);
         y += 60;
 
-        this.DrawLine(b, "Business Property Tax", x, y);
+        this.DrawLine(b, I18n.Get("tax.business_property_tax"), x, y);
         y += 45;
 
-        this.DrawLine(b, $"Estimated Business Property Tax: {this.FormatExpense(this.taxService.GetEstimatedBusinessPropertyTax())}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.estimated_business_property_tax", new { amount = this.FormatExpense(this.taxService.GetEstimatedBusinessPropertyTax()) }), x, y);
         y += 60;
 
-        this.DrawLine(b, $"Estimated Total Tax Due: {this.FormatExpense(this.taxService.GetEstimatedTotalTaxDue())}", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.estimated_total_tax_due", new { amount = this.FormatExpense(this.taxService.GetEstimatedTotalTaxDue()) }), x, y);
         y += 70;
 
-        this.DrawLine(b, "Tax History", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.tax_history"), x, y);
         y += 45;
 
         var taxRecords = this.taxService.GetRecentTaxRecords(16);
 
         if (taxRecords.Count == 0)
         {
-            this.DrawLine(b, "No tax records yet.", x, y);
+            this.DrawLine(b, I18n.Get("tax_report.no_tax_records"), x, y);
             y += 35;
         }
         else
@@ -488,7 +488,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         y += 40;
 
-        this.DrawLine(b, "Note: Direct merchant sales are treated as tax-free cash transactions.", x, y);
+        this.DrawLine(b, I18n.Get("tax_report.direct_sales_note"), x, y);
         y += 40;
 
         this.UpdateContentHeight(y + 80);
@@ -517,7 +517,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         if (items.Count == 0)
         {
-            this.DrawLine(b, "No sales recorded.", leftX, leftY);
+            this.DrawLine(b, I18n.Get("finance.no_sales_recorded"), leftX, leftY);
             leftY += 35;
         }
         else
@@ -537,7 +537,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         if (expenses.Count == 0)
         {
-            this.DrawLine(b, "No expenses recorded.", rightX, rightY);
+            this.DrawLine(b, I18n.Get("finance.no_expenses_recorded"), rightX, rightY);
             rightY += 35;
         }
         else
@@ -569,8 +569,8 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
         int leftX = x;
         int rightX = x + 360;
 
-        this.DrawLine(b, "Daily Income Details", leftX, y);
-        this.DrawLine(b, "Daily Expense Details", rightX, y);
+        this.DrawLine(b, I18n.Get("finance.daily_income_details"), leftX, y);
+        this.DrawLine(b, I18n.Get("finance.daily_expense_details"), rightX, y);
 
         y += 45;
 
@@ -579,7 +579,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         if (incomeDetails.Count == 0)
         {
-            this.DrawLine(b, "No income days recorded.", leftX, leftY);
+            this.DrawLine(b, I18n.Get("finance.no_income_days_recorded"), leftX, leftY);
             leftY += 35;
         }
         else
@@ -599,7 +599,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         if (expenseDetails.Count == 0)
         {
-            this.DrawLine(b, "No expense days recorded.", rightX, rightY);
+            this.DrawLine(b, I18n.Get("finance.no_expense_days_recorded"), rightX, rightY);
             rightY += 35;
         }
         else
@@ -780,7 +780,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         Utility.drawTextWithShadow(
             b,
-            "Spring 1",
+            I18n.Get("chart.spring_1"),
             Game1.smallFont,
             new Vector2(left - 5, bottom + 10),
             Game1.textColor
@@ -788,7 +788,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         Utility.drawTextWithShadow(
             b,
-            "Summer 1",
+            I18n.Get("chart.summer_1"),
             Game1.smallFont,
             new Vector2(left + chartWidth * 0.25f - 25, bottom + 10),
             Game1.textColor
@@ -796,7 +796,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         Utility.drawTextWithShadow(
             b,
-            "Fall 1",
+            I18n.Get("chart.fall_1"),
             Game1.smallFont,
             new Vector2(left + chartWidth * 0.50f - 20, bottom + 10),
             Game1.textColor
@@ -804,7 +804,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         Utility.drawTextWithShadow(
             b,
-            "Winter 1",
+            I18n.Get("chart.winter_1"),
             Game1.smallFont,
             new Vector2(left + chartWidth * 0.75f - 25, bottom + 10),
             Game1.textColor
@@ -850,12 +850,14 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
     private void DrawItemSummaryLine(SpriteBatch b, ItemSummary item, int x, int y)
     {
         int textX = x;
+        string displayName = item.ItemName;
 
         if (!string.IsNullOrWhiteSpace(item.ItemId))
         {
             try
             {
                 Item iconItem = ItemRegistry.Create(item.ItemId);
+                displayName = iconItem.DisplayName;
 
                 iconItem.drawInMenu(
                     b,
@@ -878,7 +880,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
 
         this.DrawLine(
             b,
-            $"{item.ItemName}   x{item.Quantity}   {item.Amount}g",
+            $"{displayName}   x{item.Quantity}   {item.Amount}g",
             textX,
             y
         );
@@ -888,7 +890,7 @@ this.DrawLine(b, $"Annual Income: {this.analyticsService.GetYearIncome()}g", x, 
     {
         this.DrawLine(
             b,
-            $"{expense.Category}   {this.FormatSignedMoney(expense.Amount)}",
+            $"{I18n.Category(expense.Category)}   {this.FormatSignedMoney(expense.Amount)}",
             x,
             y
         );

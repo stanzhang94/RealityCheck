@@ -125,25 +125,25 @@ public class HealthInsuranceNoticeService
     {
         var lines = new List<string>
         {
-            "Harvey Medical Clinic",
-            "Medical Insurance Reimbursement Notice",
+            I18n.Get("health_mail.clinic"),
+            I18n.Get("health_mail.notice_title"),
             "",
-            $"Claim Number: {mailId}",
+            I18n.Get("health_mail.claim_number", new { claimNumber = mailId }),
             "",
-            "Your medical insurance claim has been reviewed and processed.",
+            I18n.Get("health_mail.reviewed"),
             "",
-            $"Incident Date: Year {claim.MedicalExpenseYear} {this.FormatSeason(claim.MedicalExpenseSeason)} {claim.MedicalExpenseDay}",
-            $"Processed Date: Year {claim.ProcessedYear} {this.FormatSeason(claim.ProcessedSeason)} {claim.ProcessedDay}",
+            I18n.Get("health_mail.incident_date", new { date = I18n.Date(claim.MedicalExpenseYear, claim.MedicalExpenseSeason, claim.MedicalExpenseDay) }),
+            I18n.Get("health_mail.processed_date", new { date = I18n.Date(claim.ProcessedYear, claim.ProcessedSeason, claim.ProcessedDay) }),
             "",
-            $"Actual Medical Expense Charged: {this.FormatGold(claim.MedicalExpenseAmount)}",
-            $"Insurance Coverage Credited: {this.FormatGold(claim.CoverageAmount)}",
+            I18n.Get("health_mail.actual_expense_charged", new { amount = this.FormatGold(claim.MedicalExpenseAmount) }),
+            I18n.Get("health_mail.coverage_credited", new { amount = this.FormatGold(claim.CoverageAmount) }),
             "",
-            "Thank you for your continued participation in the Harvey Medical Insurance Fund."
+            I18n.Get("health_mail.thank_you")
         };
 
         string body = string.Join("^", lines);
 
-        return $"{body}[#]Harvey Medical Insurance Claim";
+        return $"{body}[#]{I18n.Get("health_mail.mail_title")}";
     }
 
     private string FormatGold(int amount)
@@ -153,13 +153,6 @@ public class HealthInsuranceNoticeService
 
     private string FormatSeason(string season)
     {
-        return season switch
-        {
-            "spring" => "Spring",
-            "summer" => "Summer",
-            "fall" => "Fall",
-            "winter" => "Winter",
-            _ => season
-        };
+        return I18n.Season(season);
     }
 }

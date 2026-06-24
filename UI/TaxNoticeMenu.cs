@@ -286,7 +286,7 @@ public class TaxNoticeMenu : IClickableMenu
         float labelX = contentLeft;
         float labelY = y + topPadding;
 
-        string label = "Authorized Signature:";
+        string label = I18n.Get("tax_notice.authorized_signature");
         Vector2 labelSize = Game1.smallFont.MeasureString(label) * labelScale;
 
         int lineX = contentLeft + 255;
@@ -346,7 +346,7 @@ public class TaxNoticeMenu : IClickableMenu
             }
             else
             {
-                string hint = "Click to sign";
+                string hint = I18n.Get("tax_notice.click_to_sign");
                 Vector2 hintSize = Game1.smallFont.MeasureString(hint) * hintScale;
 
                 b.DrawString(
@@ -366,7 +366,7 @@ public class TaxNoticeMenu : IClickableMenu
 
                 if (this.showSignatureRequiredWarning)
                 {
-                    string warning = "Signature required before this notice can be closed.";
+                    string warning = I18n.Get("tax_notice.signature_required");
 
                     b.DrawString(
                         Game1.smallFont,
@@ -409,7 +409,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         b.DrawString(
             Game1.smallFont,
-            "X",
+            I18n.Get("ui.close_x"),
             new Vector2(
                 this.closeButtonBounds.X + 10,
                 this.closeButtonBounds.Y + 6
@@ -423,7 +423,7 @@ public class TaxNoticeMenu : IClickableMenu
         if (this.GetMaxScrollOffset() <= 0)
             return;
 
-        string hint = "Mouse Wheel to Scroll";
+        string hint = I18n.Get("ui.mouse_wheel_to_scroll");
         Vector2 size = Game1.smallFont.MeasureString(hint) * 0.75f;
 
         b.DrawString(
@@ -451,7 +451,7 @@ public class TaxNoticeMenu : IClickableMenu
         Color sealRed = new Color(135, 45, 45);
 
         this.AddText(
-            "Pelican Town Revenue Service",
+            I18n.Get("tax_notice.revenue_service"),
             1.05f,
             darkBrown,
             TextAlignment.Center,
@@ -471,7 +471,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            "Pelican Town Property Assessment Office",
+            I18n.Get("tax_notice.property_assessment_office"),
             0.86f,
             midBrown,
             TextAlignment.Center,
@@ -483,7 +483,7 @@ public class TaxNoticeMenu : IClickableMenu
         this.AddDivider(0, 12);
 
         this.AddText(
-            "Joint Weekly Tax Notice",
+            I18n.Get("tax_notice.title"),
             0.84f,
             darkBrown,
             TextAlignment.Center,
@@ -493,7 +493,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            "Thank you for your continued support of Pelican Town's fiscal development.",
+            I18n.Get("tax_notice.thank_you"),
             0.82f,
             midBrown,
             TextAlignment.Center,
@@ -503,7 +503,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            $"Tax Period: Year {this.record.Year} {this.FormatSeason(this.record.Season)} {this.record.CoveredStartDay} - {this.FormatSeason(this.record.Season)} {this.record.CoveredEndDay}",
+            I18n.Get("tax_notice.tax_period", new { period = I18n.PeriodSameSeason(this.record.Year, this.record.Season, this.record.CoveredStartDay, this.record.CoveredEndDay) }),
             0.86f,
             darkBrown,
             TextAlignment.Left,
@@ -513,7 +513,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            $"Settlement Date: Year {this.record.SettlementYear} {this.FormatSeason(this.record.SettlementSeason)} {this.record.SettlementDay}",
+            I18n.Get("tax_notice.settlement_date", new { date = I18n.Date(this.record.SettlementYear, this.record.SettlementSeason, this.record.SettlementDay) }),
             0.86f,
             darkBrown,
             TextAlignment.Left,
@@ -522,22 +522,22 @@ public class TaxNoticeMenu : IClickableMenu
             14
         );
 
-        this.AddSectionHeader("Income Tax", darkBrown);
+        this.AddSectionHeader(I18n.Get("tax.income_tax"), darkBrown);
         this.BuildIncomeSection(darkBrown, midBrown);
 
-        this.AddSectionHeader("Property Tax", darkBrown);
+        this.AddSectionHeader(I18n.Get("tax.property_tax"), darkBrown);
         this.BuildPropertySection(darkBrown, midBrown);
 
-        this.AddSectionHeader("Business Property Tax", darkBrown);
+        this.AddSectionHeader(I18n.Get("tax.business_property_tax"), darkBrown);
         this.BuildBusinessPropertySection(darkBrown, midBrown);
 
-        this.AddSectionHeader("Total Tax Due", darkBrown);
+        this.AddSectionHeader(I18n.Get("tax_notice.total_tax_due"), darkBrown);
         this.BuildTotalSection(darkBrown, midBrown);
 
         this.AddDivider(14, 14);
 
         this.AddText(
-            "Issued by:",
+            I18n.Get("tax_notice.issued_by"),
             0.82f,
             darkBrown,
             TextAlignment.Left,
@@ -547,7 +547,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            "Pelican Town Revenue Service / Property Assessment Office",
+            I18n.Get("tax_notice.issued_by_value"),
             0.86f,
             darkBrown,
             TextAlignment.Left,
@@ -559,7 +559,7 @@ public class TaxNoticeMenu : IClickableMenu
         this.AddSignatureBlock();
 
         this.AddText(
-            "OFFICIAL SEAL",
+            I18n.Get("tax_notice.official_seal"),
             0.92f,
             sealRed,
             TextAlignment.Right,
@@ -569,7 +569,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            "Questions or appeals may be submitted through Nexus Mods - Reality Check - Posts.",
+            I18n.Get("tax_notice.questions_or_appeals"),
             0.78f,
             midBrown,
             TextAlignment.Left,
@@ -579,7 +579,7 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddText(
-            "Please note that submitting an appeal does not guarantee adjustment, refund, review priority, or emotional closure of any kind.",
+            I18n.Get("tax_notice.appeal_disclaimer"),
             0.76f,
             midBrown,
             TextAlignment.Left,
@@ -592,22 +592,22 @@ public class TaxNoticeMenu : IClickableMenu
     private void BuildIncomeSection(Color darkBrown, Color midBrown)
     {
         this.AddBodyLine(
-            $"Taxable Shipping Bin Income: {this.FormatGold(this.record.TaxableShippingBinIncome)}",
+            I18n.Get("tax_notice.taxable_shipping_bin_income", new { amount = this.FormatGold(this.record.TaxableShippingBinIncome) }),
             darkBrown
         );
 
         this.AddBodyLine(
-            $"Applied Tax Rate: {this.FormatPercent(this.record.IncomeTaxRate)}",
+            I18n.Get("tax_notice.applied_tax_rate", new { rate = this.FormatPercent(this.record.IncomeTaxRate) }),
             darkBrown
         );
 
         this.AddBodyLine(
-            $"Formula: {this.FormatGold(this.record.TaxableShippingBinIncome)} x {this.FormatPercent(this.record.IncomeTaxRate)} = {this.FormatGold(this.record.IncomeTaxAmount)}",
+            I18n.Get("tax_notice.formula", new { formula = $"{this.FormatGold(this.record.TaxableShippingBinIncome)} x {this.FormatPercent(this.record.IncomeTaxRate)} = {this.FormatGold(this.record.IncomeTaxAmount)}" }),
             darkBrown
         );
 
         this.AddBodyLine(
-            $"Income Tax Due: {this.FormatGold(this.record.IncomeTaxAmount)}",
+            I18n.Get("tax_notice.income_tax_due", new { amount = this.FormatGold(this.record.IncomeTaxAmount) }),
             darkBrown,
             bottomPadding: 12
         );
@@ -638,22 +638,22 @@ public class TaxNoticeMenu : IClickableMenu
             ? assessments[0].DepreciationFactor
             : 1.0;
 
-        this.AddBodyLine($"Replacement Cost (RC): {this.FormatGold(rc)}", darkBrown);
-        this.AddBodyLine($"Income Potential Value (IPV): {this.FormatGold(ipv)}", darkBrown);
-        this.AddBodyLine($"Utility Premium (UP): {this.FormatGold(up)}", darkBrown);
-        this.AddBodyLine($"Risk Shield Premium (RSP): {this.FormatGold(rsp)}", darkBrown);
-        this.AddBodyLine($"Depreciation Factor: {this.FormatPercent(depreciationFactor)}", darkBrown);
-        this.AddBodyLine($"Agricultural Deduction (AD): -{this.FormatGoldValueOnly(ad)}", darkBrown);
-        this.AddBodyLine($"Administrative Fee: {this.FormatGold(admin)}", darkBrown);
-        this.AddBodyLine($"Documentation Fee: {this.FormatGold(doc)}", darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.replacement_cost", new { amount = this.FormatGold(rc) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.income_potential_value", new { amount = this.FormatGold(ipv) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.utility_premium", new { amount = this.FormatGold(up) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.risk_shield_premium", new { amount = this.FormatGold(rsp) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.depreciation_factor", new { factor = this.FormatPercent(depreciationFactor) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.agricultural_deduction", new { amount = this.FormatGoldValueOnly(ad) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.administrative_fee", new { amount = this.FormatGold(admin) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.documentation_fee", new { amount = this.FormatGold(doc) }), darkBrown);
 
         this.AddBodyLine(
-            $"Formula: (({this.FormatGold(rc)} + {this.FormatGold(ipv)} + {this.FormatGold(up)} + {this.FormatGold(rsp)}) x {this.FormatPercent(depreciationFactor)}) - {this.FormatGoldValueOnly(ad)} + {this.FormatGold(admin)} + {this.FormatGold(doc)} = {this.FormatGold(this.record.PropertyTaxAmount)}",
+            I18n.Get("tax_notice.formula", new { formula = $"(({this.FormatGold(rc)} + {this.FormatGold(ipv)} + {this.FormatGold(up)} + {this.FormatGold(rsp)}) x {this.FormatPercent(depreciationFactor)}) - {this.FormatGoldValueOnly(ad)} + {this.FormatGold(admin)} + {this.FormatGold(doc)} = {this.FormatGold(this.record.PropertyTaxAmount)}" }),
             darkBrown
         );
 
         this.AddBodyLine(
-            $"Property Tax Due: {this.FormatGold(this.record.PropertyTaxAmount)}",
+            I18n.Get("tax_notice.property_tax_due", new { amount = this.FormatGold(this.record.PropertyTaxAmount) }),
             darkBrown,
             bottomPadding: 12
         );
@@ -676,7 +676,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Keg",
+            I18n.Get("machine.keg"),
             assessments,
             a => a.KegCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.Keg
@@ -684,7 +684,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Preserves Jar",
+            I18n.Get("machine.preserves_jar"),
             assessments,
             a => a.PreservesJarCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.PreservesJar
@@ -692,7 +692,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Cask",
+            I18n.Get("machine.cask"),
             assessments,
             a => a.CaskCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.Cask
@@ -700,7 +700,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Bee House",
+            I18n.Get("machine.bee_house"),
             assessments,
             a => a.BeeHouseCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.BeeHouse
@@ -708,7 +708,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Mayonnaise Machine",
+            I18n.Get("machine.mayonnaise_machine"),
             assessments,
             a => a.MayonnaiseMachineCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.MayonnaiseMachine
@@ -716,7 +716,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Cheese Press",
+            I18n.Get("machine.cheese_press"),
             assessments,
             a => a.CheesePressCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.CheesePress
@@ -724,7 +724,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Loom",
+            I18n.Get("machine.loom"),
             assessments,
             a => a.LoomCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.Loom
@@ -732,7 +732,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Oil Maker",
+            I18n.Get("machine.oil_maker"),
             assessments,
             a => a.OilMakerCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.OilMaker
@@ -740,7 +740,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Dehydrator",
+            I18n.Get("machine.dehydrator"),
             assessments,
             a => a.DehydratorCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.Dehydrator
@@ -748,7 +748,7 @@ public class TaxNoticeMenu : IClickableMenu
 
         this.AddBusinessMachineLine(
             businessLines,
-            "Fish Smoker",
+            I18n.Get("machine.fish_smoker"),
             assessments,
             a => a.FishSmokerCount,
             this.taxConfig.BusinessPropertyDailyTaxRates.FishSmoker
@@ -757,7 +757,7 @@ public class TaxNoticeMenu : IClickableMenu
         if (businessLines.Count == 0)
         {
             this.AddBodyLine(
-                "No assessed business equipment exceeded the taxable threshold.",
+                I18n.Get("tax_notice.no_taxable_business_equipment"),
                 darkBrown
             );
         }
@@ -768,7 +768,7 @@ public class TaxNoticeMenu : IClickableMenu
         }
 
         this.AddBodyLine(
-            $"Business Property Tax Due: {this.FormatGold(this.record.BusinessPropertyTaxAmount)}",
+            I18n.Get("tax_notice.business_property_tax_due", new { amount = this.FormatGold(this.record.BusinessPropertyTaxAmount) }),
             darkBrown,
             bottomPadding: 12
         );
@@ -776,11 +776,11 @@ public class TaxNoticeMenu : IClickableMenu
 
     private void BuildTotalSection(Color darkBrown, Color midBrown)
     {
-        this.AddBodyLine($"Income Tax: {this.FormatGold(this.record.IncomeTaxAmount)}", darkBrown);
-        this.AddBodyLine($"Property Tax: {this.FormatGold(this.record.PropertyTaxAmount)}", darkBrown);
-        this.AddBodyLine($"Business Property Tax: {this.FormatGold(this.record.BusinessPropertyTaxAmount)}", darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.income_tax_total_line", new { amount = this.FormatGold(this.record.IncomeTaxAmount) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.property_tax_total_line", new { amount = this.FormatGold(this.record.PropertyTaxAmount) }), darkBrown);
+        this.AddBodyLine(I18n.Get("tax_notice.business_property_tax_total_line", new { amount = this.FormatGold(this.record.BusinessPropertyTaxAmount) }), darkBrown);
         this.AddBodyLine(
-            $"Total: {this.FormatGold(this.record.TotalTaxAmount)}",
+            I18n.Get("tax_notice.total_line", new { amount = this.FormatGold(this.record.TotalTaxAmount) }),
             darkBrown,
             bottomPadding: 18
         );
@@ -1015,14 +1015,7 @@ public class TaxNoticeMenu : IClickableMenu
 
     private string FormatSeason(string season)
     {
-        return season switch
-        {
-            "spring" => "Spring",
-            "summer" => "Summer",
-            "fall" => "Fall",
-            "winter" => "Winter",
-            _ => season
-        };
+        return I18n.Season(season);
     }
 
     private enum TextAlignment

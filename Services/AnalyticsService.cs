@@ -326,7 +326,7 @@ public class AnalyticsService
 
             result.Add(new DailyIncomeSummary
             {
-                Label = $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {day}",
+                Label = I18n.Date(Game1.year, Game1.currentSeason, day),
                 Amount = income
             });
         }
@@ -375,7 +375,7 @@ public class AnalyticsService
 
                 result.Add(new DailyIncomeSummary
                 {
-                    Label = $"Year {Game1.year} {this.FormatSeason(season)} {day}",
+                    Label = I18n.Date(Game1.year, season, day),
                     Amount = income
                 });
             }
@@ -401,7 +401,7 @@ public class AnalyticsService
 
             result.Add(new DailyIncomeSummary
             {
-                Label = $"Year {Game1.year} {this.FormatSeason(Game1.currentSeason)} {day}",
+                Label = I18n.Date(Game1.year, Game1.currentSeason, day),
                 Amount = expense
             });
         }
@@ -447,7 +447,7 @@ public class AnalyticsService
 
                 result.Add(new DailyIncomeSummary
                 {
-                    Label = $"Year {Game1.year} {this.FormatSeason(season)} {day}",
+                    Label = I18n.Date(Game1.year, season, day),
                     Amount = expense
                 });
             }
@@ -536,13 +536,6 @@ public class AnalyticsService
 
     private string FormatSeason(string season)
     {
-        return season switch
-        {
-            "spring" => "Spring",
-            "summer" => "Summer",
-            "fall" => "Fall",
-            "winter" => "Winter",
-            _ => season
-        };
+        return I18n.Season(season);
     }
 }

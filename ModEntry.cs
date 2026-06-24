@@ -22,6 +22,8 @@ public class ModEntry : Mod
 
     public override void Entry(IModHelper helper)
     {
+        I18n.Init(helper);
+
         this.configService = new ConfigService(
             helper,
             this.Monitor

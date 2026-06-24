@@ -602,7 +602,10 @@ public class TaxNoticeMenu : IClickableMenu
         );
 
         this.AddBodyLine(
-            I18n.Get("tax_notice.formula", new { formula = $"{this.FormatGold(this.record.TaxableShippingBinIncome)} x {this.FormatPercent(this.record.IncomeTaxRate)} = {this.FormatGold(this.record.IncomeTaxAmount)}" }),
+            I18n.Get("tax_notice.formula", new { formula = this.BuildFormulaResult(
+                $"{this.FormatGold(this.record.TaxableShippingBinIncome)} x {this.FormatPercent(this.record.IncomeTaxRate)}",
+                this.FormatGold(this.record.IncomeTaxAmount)
+            ) }),
             darkBrown
         );
 
@@ -648,7 +651,10 @@ public class TaxNoticeMenu : IClickableMenu
         this.AddBodyLine(I18n.Get("tax_notice.documentation_fee", new { amount = this.FormatGold(doc) }), darkBrown);
 
         this.AddBodyLine(
-            I18n.Get("tax_notice.formula", new { formula = $"(({this.FormatGold(rc)} + {this.FormatGold(ipv)} + {this.FormatGold(up)} + {this.FormatGold(rsp)}) x {this.FormatPercent(depreciationFactor)}) - {this.FormatGoldValueOnly(ad)} + {this.FormatGold(admin)} + {this.FormatGold(doc)} = {this.FormatGold(this.record.PropertyTaxAmount)}" }),
+            I18n.Get("tax_notice.formula", new { formula = this.BuildFormulaResult(
+                $"(({this.FormatGold(rc)} & {this.FormatGold(ipv)} & {this.FormatGold(up)} & {this.FormatGold(rsp)}) x {this.FormatPercent(depreciationFactor)}) - {this.FormatGoldValueOnly(ad)} & {this.FormatGold(admin)} & {this.FormatGold(doc)}",
+                this.FormatGold(this.record.PropertyTaxAmount)
+            ) }),
             darkBrown
         );
 
@@ -821,14 +827,24 @@ public class TaxNoticeMenu : IClickableMenu
         else
         {
             countSummary = string.Join(
-                " + ",
+                " & ",
                 groups.Select(g => $"{g.Count} x {g.Days}")
             );
 
             countSummary = $"({countSummary}) x {dailyTax}g";
         }
 
-        lines.Add($"{displayName}: {countSummary} = {this.FormatGold(totalAmount)}");
+        lines.Add($"{displayName}: {this.BuildFormulaResult(countSummary, this.FormatGold(totalAmount))}");
+    }
+
+    private string BuildFormulaResult(string left, string right)
+    {
+        return $"{left}{this.GetFormulaResultSeparator()}{right}";
+    }
+
+    private string GetFormulaResultSeparator()
+    {
+        return " -> ";
     }
 
     private int GetTaxableBusinessPropertyCount(int count)

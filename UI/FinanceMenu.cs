@@ -941,12 +941,53 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawLine(SpriteBatch b, string text, int x, int y)
     {
-        Utility.drawTextWithShadow(
-            b,
-            text,
+        float scale = this.GetBodyTextScale();
+
+        if (Math.Abs(scale - 1f) < 0.001f)
+        {
+            Utility.drawTextWithShadow(
+                b,
+                text,
+                Game1.smallFont,
+                new Vector2(x, y),
+                Game1.textColor
+            );
+
+            return;
+        }
+
+        b.DrawString(
             Game1.smallFont,
+            text,
             new Vector2(x, y),
-            Game1.textColor
+            Game1.textColor,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            1f
         );
+    }
+
+    private float GetBodyTextScale()
+    {
+        string languageCode = LocalizedContentManager.CurrentLanguageCode.ToString();
+
+        return languageCode switch
+        {
+            "zh" => 1.00f,
+            "en" => 0.65f,
+            "ja" => 0.95f,
+            "ko" => 0.95f,
+            "pt" => 0.82f,
+            "es" => 0.85f,
+            "fr" => 0.85f,
+            "de" => 0.78f,
+            "it" => 0.85f,
+            "ru" => 0.85f,
+            "tr" => 0.85f,
+            "hu" => 0.85f,
+            _ => 0.85f
+        };
     }
 }

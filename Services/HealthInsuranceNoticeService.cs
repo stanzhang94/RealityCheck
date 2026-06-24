@@ -128,7 +128,7 @@ public class HealthInsuranceNoticeService
             I18n.Get("health_mail.clinic"),
             I18n.Get("health_mail.notice_title"),
             "",
-            I18n.Get("health_mail.claim_number", new { claimNumber = mailId }),
+            I18n.Get("health_mail.claim_number", new { claimNumber = this.BuildDisplayClaimNumber(claim) }),
             "",
             I18n.Get("health_mail.reviewed"),
             "",
@@ -144,6 +144,26 @@ public class HealthInsuranceNoticeService
         string body = string.Join("^", lines);
 
         return $"{body}[#]{I18n.Get("health_mail.mail_title")}";
+    }
+
+    private string BuildDisplayClaimNumber(HealthInsuranceClaim claim)
+    {
+        string source = string.IsNullOrWhiteSpace(claim.Id)
+            ? claim.GetMailId()
+            : claim.Id;
+
+        uint hash = 2166136261;
+
+        unchecked
+        {
+            foreach (char c in source)
+            {
+                hash ^= c;
+                hash *= 16777619;
+            }
+        }
+
+        return $"HMC-{hash:X8}";
     }
 
     private string FormatGold(int amount)

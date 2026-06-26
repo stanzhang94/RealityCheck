@@ -1,10 +1,13 @@
 using System.Collections.Generic;
+using StardewModdingAPI.Utilities;
 
 namespace RealityCheck.Data;
 
 public class ModConfig
 {
     public TaxConfig Tax { get; set; } = new();
+
+    public KeybindList OpenReportKey { get; set; } = KeybindList.Parse("O");
 }
 
 public class TaxConfig

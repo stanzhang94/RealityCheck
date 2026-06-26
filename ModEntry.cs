@@ -85,7 +85,7 @@ public class ModEntry : Mod
 
         helper.Events.GameLoop.DayEnding += this.incomeEvents.OnDayEnding;
 
-        helper.Events.Input.ButtonPressed += this.OnButtonPressed;
+        helper.Events.Input.ButtonsChanged += this.OnButtonsChanged;
 
         helper.Events.GameLoop.SaveLoaded += this.expenseEvents.OnSaveLoaded;
         helper.Events.GameLoop.DayStarted += this.expenseEvents.OnDayStarted;
@@ -115,24 +115,25 @@ public class ModEntry : Mod
         this.ledgerService?.Save();
     }
 
-    private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
+    private void OnButtonsChanged(object? sender, ButtonsChangedEventArgs e)
     {
         if (!Context.IsWorldReady)
             return;
 
-        if (e.Button == SButton.O)
-        {
-            if (this.ledgerService is null || this.analyticsService is null)
-                return;
-
-            Game1.activeClickableMenu = new FinanceMenu(
-                this.ledgerService,
-                this.analyticsService
-            );
-
-            Game1.playSound("bigSelect");
-
+        if (Game1.activeClickableMenu is not null)
             return;
-        }
+
+        if (this.configService?.Config.OpenReportKey.JustPressed() != true)
+            return;
+
+        if (this.ledgerService is null || this.analyticsService is null)
+            return;
+
+        Game1.activeClickableMenu = new FinanceMenu(
+            this.ledgerService,
+            this.analyticsService
+        );
+
+        Game1.playSound("bigSelect");
     }
 }

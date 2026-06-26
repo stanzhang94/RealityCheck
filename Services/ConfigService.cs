@@ -1,6 +1,7 @@
 using System.Linq;
 using RealityCheck.Data;
 using StardewModdingAPI;
+using StardewModdingAPI.Utilities;
 
 namespace RealityCheck.Services;
 
@@ -45,6 +46,7 @@ public class ConfigService
         this.Config.Tax.BusinessPropertyDailyTaxRates ??= new BusinessPropertyDailyTaxRates();
         this.Config.Tax.IncomeTaxBrackets ??= new();
         this.Config.Tax.PropertyTax ??= new PropertyTaxConfig();
+        this.Config.OpenReportKey ??= KeybindList.Parse("O");
 
         if (this.Config.Tax.BusinessPropertyTaxThreshold <= 0)
             this.Config.Tax.BusinessPropertyTaxThreshold = 20;

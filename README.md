@@ -88,14 +88,31 @@ Outstanding balance is not shown inside the Tax Notice itself. It belongs to the
 
 Reality Check includes a `config.json` generated after first launch.
 
-Some tax parameters are configurable, including:
+Some parameters are configurable, including:
 
+- Economic Report hotkey
 - Tax notice mail toggle
 - Tax notice signature requirement
 - Income tax brackets
 - Business property tax threshold
 - Business property daily tax rates
 - Property tax fee values
+
+The default key to open the Economic Report is `O`. You can change it in `config.json`:
+
+```json
+"OpenReportKey": "O"
+```
+
+Examples:
+
+```json
+"OpenReportKey": "F8"
+"OpenReportKey": "LeftAlt + P"
+"OpenReportKey": "LeftControl + P"
+```
+
+On Mac keyboards, `Alt` means `Option`.
 
 Health insurance values are currently handled in code and may be expanded later.
 

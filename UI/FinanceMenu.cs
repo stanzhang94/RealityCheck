@@ -13,6 +13,7 @@ namespace RealityCheck.UI;
 
 public class FinanceMenu : IClickableMenu
 {
+    private readonly LedgerService ledgerService;
     private readonly AnalyticsService analyticsService;
     private readonly TaxService taxService;
     private readonly MarketPriceService marketPriceService;
@@ -73,6 +74,7 @@ public class FinanceMenu : IClickableMenu
         MarketPriceService marketPriceService
     )
     {
+        this.ledgerService = ledgerService;
         this.analyticsService = analyticsService;
         this.taxService = new TaxService(ledgerService);
         this.marketPriceService = marketPriceService;
@@ -507,7 +509,9 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private List<MarketPriceTableEntry> GetSortedMarketPriceEntries()
     {
-        this.marketPriceEntries ??= this.marketPriceService.GetSellableObjectMarketPriceTable();
+        this.marketPriceEntries ??= this.marketPriceService.GetSellableObjectMarketPriceTable(
+            this.ledgerService.GetEntries()
+        );
 
         IEnumerable<MarketPriceTableEntry> sorted = this.marketPriceSortMode switch
         {

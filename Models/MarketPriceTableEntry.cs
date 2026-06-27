@@ -6,6 +6,12 @@ public class MarketPriceTableEntry
 {
     public string ItemId { get; set; } = string.Empty;
 
+    public string MarketCommodityKey { get; set; } = string.Empty;
+
+    public string ParentItemId { get; set; } = string.Empty;
+
+    public bool IsDiscoveredArtisan { get; set; }
+
     public string ItemName { get; set; } = string.Empty;
 
     public int BaseUnitPrice { get; set; }

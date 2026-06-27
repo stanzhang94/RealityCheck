@@ -292,7 +292,8 @@ public class LedgerService
         string dataOrigin = "",
         string transactionId = "",
         string marketCommodityKey = "",
-        string parentItemId = ""
+        string parentItemId = "",
+        int baseUnitPrice = 0
     )
     {
         this.EnsureLoadedForCurrentSave();
@@ -313,6 +314,7 @@ public class LedgerService
                 ? itemId
                 : marketCommodityKey,
             ParentItemId = parentItemId,
+            BaseUnitPrice = Math.Max(0, baseUnitPrice),
             Quantity = quantity,
             Amount = amount,
             TimeOfDay = Game1.timeOfDay,

@@ -30,6 +30,13 @@ public class LedgerEntry
     /// </summary>
     public string ParentItemId { get; set; } = "";
 
+    /// <summary>
+    /// Vanilla/base sell unit price recorded at the time of transaction.
+    /// Used to rebuild discovered flavored artisan rows in Market Price.
+    /// Zero for old entries created before this field existed.
+    /// </summary>
+    public int BaseUnitPrice { get; set; }
+
     public int Quantity { get; set; }
 
     public int Amount { get; set; }

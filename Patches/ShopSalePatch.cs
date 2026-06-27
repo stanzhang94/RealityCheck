@@ -64,6 +64,13 @@ public static class ShopSalePatch
         if (__args.Length >= 3 && __args[2] is int stack)
             quantity = Math.Max(1, stack);
 
+        int baseUnitPrice = __args[0] is Item soldItemForBasePrice
+            ? ShopSaleMarketPricePatch.ConsumeBaseUnitPriceForShopSale(
+                soldItemForBasePrice,
+                unitPrice
+            )
+            : unitPrice;
+
         int amount = unitPrice * quantity;
 
         if (amount <= 0)
@@ -97,7 +104,8 @@ public static class ShopSalePatch
             dataOrigin: "KnownShopSale",
             transactionId: transactionId,
             marketCommodityKey: identity.MarketCommodityKey,
-            parentItemId: identity.ParentItemId
+            parentItemId: identity.ParentItemId,
+            baseUnitPrice: baseUnitPrice
         );
 
         monitor?.Log(

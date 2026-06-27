@@ -66,12 +66,11 @@ public class IncomeEvents
             if (quantity <= 0 || vanillaTotalAmount <= 0)
                 continue;
 
-            string key = $"{item.QualifiedItemId}|{item.DisplayName}|{unitPrice}";
+            var identity = this.artisanIdentityService.Resolve(item);
+            string key = $"{identity.MarketCommodityKey}|{item.DisplayName}|{unitPrice}";
 
             if (!shippingGroups.TryGetValue(key, out ShippingItemGroup? group))
             {
-                var identity = this.artisanIdentityService.Resolve(item);
-
                 group = new ShippingItemGroup
                 {
                     SampleItem = item,
@@ -135,7 +134,8 @@ public class IncomeEvents
                 dataOrigin: dataOrigin,
                 transactionId: transactionId,
                 marketCommodityKey: group.MarketCommodityKey,
-                parentItemId: group.ParentItemId
+                parentItemId: group.ParentItemId,
+                baseUnitPrice: unitPrice
             );
 
             totalVanillaShippingIncome += vanillaTotalAmount;

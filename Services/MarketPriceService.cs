@@ -55,9 +55,12 @@ public class MarketPriceService
         -81  // Forage / Greens
     };
 
-    public List<MarketPriceTableEntry> GetSellableObjectMarketPriceTable()
+    public List<MarketPriceTableEntry> GetSellableObjectMarketPriceTable(
+        IEnumerable<LedgerEntry>? ledgerEntries = null
+    )
     {
         List<MarketPriceTableEntry> entries = new();
+        HashSet<string> entryKeys = new(StringComparer.OrdinalIgnoreCase);
 
         if (!Context.IsWorldReady)
             return entries;
@@ -98,28 +101,145 @@ public class MarketPriceService
             if (!this.ShouldApplyMarketPricing(item, baseUnitPrice))
                 continue;
 
+            if (this.IsGenericFlavoredArtisanTemplate(item))
+                continue;
+
             double multiplier = this.GetShadowPriceMultiplier();
             int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
 
-            entries.Add(
-                new MarketPriceTableEntry
-                {
-                    ItemId = item.QualifiedItemId,
-                    ItemName = item.DisplayName,
-                    BaseUnitPrice = baseUnitPrice,
-                    MarketMultiplier = multiplier,
-                    MarketUnitPrice = marketUnitPrice,
-                    Difference = marketUnitPrice - baseUnitPrice,
-                    IconItem = item
-                }
-            );
+            var entry = new MarketPriceTableEntry
+            {
+                ItemId = item.QualifiedItemId,
+                MarketCommodityKey = item.QualifiedItemId,
+                ItemName = item.DisplayName,
+                BaseUnitPrice = baseUnitPrice,
+                MarketMultiplier = multiplier,
+                MarketUnitPrice = marketUnitPrice,
+                Difference = marketUnitPrice - baseUnitPrice,
+                IconItem = item
+            };
+
+            entries.Add(entry);
+            entryKeys.Add(entry.MarketCommodityKey);
         }
+
+        this.AddDiscoveredFlavoredArtisanEntries(
+            entries,
+            entryKeys,
+            ledgerEntries
+        );
 
         return entries
             .OrderByDescending(e => Math.Abs(e.Difference))
             .ThenBy(e => e.ItemName)
             .ToList();
     }
+
+
+
+    private void AddDiscoveredFlavoredArtisanEntries(
+        List<MarketPriceTableEntry> entries,
+        HashSet<string> entryKeys,
+        IEnumerable<LedgerEntry>? ledgerEntries
+    )
+    {
+        if (ledgerEntries is null)
+            return;
+
+        double multiplier = this.GetShadowPriceMultiplier();
+        HashSet<string> added = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (LedgerEntry entry in ledgerEntries.Reverse())
+        {
+            if (!this.IsDiscoveredFlavoredArtisanLedgerEntry(entry))
+                continue;
+
+            if (!added.Add(entry.MarketCommodityKey))
+                continue;
+
+            if (entryKeys.Contains(entry.MarketCommodityKey))
+                continue;
+
+            int baseUnitPrice = Math.Max(0, entry.BaseUnitPrice);
+
+            if (baseUnitPrice < MinimumMarketManagedBaseUnitPrice)
+                continue;
+
+            int marketUnitPrice = this.CalculateMarketUnitPrice(
+                baseUnitPrice,
+                multiplier
+            );
+
+            Item? iconItem = this.TryCreateIconItem(entry.ItemId);
+
+            entries.Add(
+                new MarketPriceTableEntry
+                {
+                    ItemId = entry.ItemId,
+                    MarketCommodityKey = entry.MarketCommodityKey,
+                    ParentItemId = entry.ParentItemId,
+                    IsDiscoveredArtisan = true,
+                    ItemName = entry.ItemName,
+                    BaseUnitPrice = baseUnitPrice,
+                    MarketMultiplier = multiplier,
+                    MarketUnitPrice = marketUnitPrice,
+                    Difference = marketUnitPrice - baseUnitPrice,
+                    IconItem = iconItem
+                }
+            );
+
+            entryKeys.Add(entry.MarketCommodityKey);
+        }
+    }
+
+    private bool IsDiscoveredFlavoredArtisanLedgerEntry(LedgerEntry entry)
+    {
+        if (!string.Equals(entry.Type, "Income", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(entry.MarketCommodityKey))
+            return false;
+
+        if (!entry.MarketCommodityKey.StartsWith("Artisan:", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(entry.ParentItemId))
+            return false;
+
+        if (entry.BaseUnitPrice <= 0)
+            return false;
+
+        return true;
+    }
+
+    private bool IsGenericFlavoredArtisanTemplate(Item item)
+    {
+        string itemId = item.QualifiedItemId ?? string.Empty;
+
+        return string.Equals(itemId, "(O)342", StringComparison.OrdinalIgnoreCase)  // Pickles
+            || string.Equals(itemId, "(O)344", StringComparison.OrdinalIgnoreCase)  // Jelly
+            || string.Equals(itemId, "(O)348", StringComparison.OrdinalIgnoreCase)  // Wine
+            || string.Equals(itemId, "(O)350", StringComparison.OrdinalIgnoreCase)  // Juice
+            || string.Equals(itemId, "(O)SmokedFish", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(itemId, "(O)DriedMushrooms", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(itemId, "(O)DriedFruit", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Item? TryCreateIconItem(string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return null;
+
+        try
+        {
+            return ItemRegistry.Create(itemId);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
 
     public bool ShouldApplyMarketPricing(
         Item? item,

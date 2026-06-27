@@ -10,6 +10,8 @@ namespace RealityCheck.Services;
 
 public class MarketPriceService
 {
+    private const int MinimumMarketManagedBaseUnitPrice = 10;
+
     private readonly ConfigService configService;
     private readonly IMonitor monitor;
 
@@ -63,12 +65,8 @@ public class MarketPriceService
         foreach (var pair in Game1.objectData)
         {
             string objectId = pair.Key;
-            var objectData = pair.Value;
 
             if (string.IsNullOrWhiteSpace(objectId))
-                continue;
-
-            if (!this.ShouldIncludeInMarketPriceTable(objectData.Category, objectData.Name))
                 continue;
 
             string qualifiedItemId = objectId.StartsWith("(O)", StringComparison.Ordinal)
@@ -97,7 +95,7 @@ public class MarketPriceService
                 continue;
             }
 
-            if (baseUnitPrice < 10)
+            if (!this.ShouldApplyMarketPricing(item, baseUnitPrice))
                 continue;
 
             double multiplier = this.GetShadowPriceMultiplier();
@@ -123,15 +121,24 @@ public class MarketPriceService
             .ToList();
     }
 
-    private bool ShouldIncludeInMarketPriceTable(int category, string? internalName)
+    public bool ShouldApplyMarketPricing(
+        Item? item,
+        int baseUnitPrice
+    )
     {
-        if (!MarketPriceCategoryWhitelist.Contains(category))
+        if (item is null)
+            return false;
+
+        if (baseUnitPrice < MinimumMarketManagedBaseUnitPrice)
+            return false;
+
+        if (!MarketPriceCategoryWhitelist.Contains(item.Category))
             return false;
 
         // Slime eggs are technically sellable, but they are special monster/slime-hutch items,
         // not normal farm-market commodities. Keep them out even if the game categorizes them like eggs.
-        if (!string.IsNullOrWhiteSpace(internalName)
-            && internalName.Contains("Slime Egg", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(item.Name)
+            && item.Name.Contains("Slime Egg", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -145,21 +152,39 @@ public class MarketPriceService
         int baseUnitPrice
     )
     {
+        int safeQuantity = Math.Max(0, quantity);
+        int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
+        int baseTotal = safeBaseUnitPrice * safeQuantity;
+
+        if (!this.ShouldApplyMarketPricing(item, safeBaseUnitPrice))
+        {
+            return new MarketPriceResult
+            {
+                ItemName = item.DisplayName,
+                ItemId = item.QualifiedItemId,
+                Quantity = safeQuantity,
+                BaseUnitPrice = safeBaseUnitPrice,
+                BaseTotal = baseTotal,
+                MarketMultiplier = 1.0,
+                MarketTotal = baseTotal,
+                MarketUnitPrice = safeBaseUnitPrice
+            };
+        }
+
         double multiplier = this.GetShadowPriceMultiplier();
-        int baseTotal = Math.Max(0, baseUnitPrice) * Math.Max(0, quantity);
         int marketTotal = this.CalculateMarketTotal(baseTotal, multiplier);
 
         return new MarketPriceResult
         {
             ItemName = item.DisplayName,
             ItemId = item.QualifiedItemId,
-            Quantity = quantity,
-            BaseUnitPrice = baseUnitPrice,
+            Quantity = safeQuantity,
+            BaseUnitPrice = safeBaseUnitPrice,
             BaseTotal = baseTotal,
             MarketMultiplier = multiplier,
             MarketTotal = marketTotal,
-            MarketUnitPrice = quantity > 0
-                ? (double)marketTotal / quantity
+            MarketUnitPrice = safeQuantity > 0
+                ? (double)marketTotal / safeQuantity
                 : 0.0
         };
     }
@@ -175,6 +200,22 @@ public class MarketPriceService
             item,
             quantity,
             baseUnitPrice
+        );
+    }
+
+    public int GetShopSaleMarketUnitPrice(
+        Item item,
+        int baseUnitPrice
+    )
+    {
+        int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
+
+        if (!this.ShouldApplyMarketPricing(item, safeBaseUnitPrice))
+            return safeBaseUnitPrice;
+
+        return this.CalculateMarketUnitPrice(
+            safeBaseUnitPrice,
+            this.GetShadowPriceMultiplier()
         );
     }
 

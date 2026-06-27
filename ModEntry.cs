@@ -81,6 +81,11 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        ShopSaleMarketPricePatch.Initialize(
+            this.marketPriceService,
+            this.Monitor
+        );
+
         ShippingSettlementTracePatch.Initialize(
             this.Monitor,
             this.configService
@@ -91,6 +96,7 @@ public class ModEntry : Mod
         );
 
         ShopSalePatch.Apply(harmony);
+        ShopSaleMarketPricePatch.Apply(harmony);
         ShippingSettlementTracePatch.Apply(harmony);
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;

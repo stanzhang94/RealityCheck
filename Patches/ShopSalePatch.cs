@@ -67,14 +67,23 @@ public static class ShopSalePatch
             return;
         }
 
-        ledgerService.SuppressNextIncomeAmount(amount);
+        string transactionId = $"shop_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}_{Guid.NewGuid():N}";
+
+        ledgerService.SuppressNextIncomeAmount(
+            amount,
+            reason: "KnownShopSaleIncome",
+            source: "Shop Sale",
+            transactionId: transactionId
+        );
 
         ledgerService.AddIncome(
             "Shop Sale",
             itemName,
             quantity,
             amount,
-            itemId
+            itemId,
+            dataOrigin: "KnownShopSale",
+            transactionId: transactionId
         );
 
         monitor?.Log(

@@ -46,12 +46,16 @@ public class IncomeEvents
             if (totalAmount <= 0)
                 continue;
 
+            string transactionId = $"shipping_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}_{Guid.NewGuid():N}";
+
             this.ledgerService.AddIncome(
                 "Shipping Bin",
                 item.DisplayName,
                 quantity,
                 totalAmount,
-                item.QualifiedItemId
+                item.QualifiedItemId,
+                dataOrigin: "CalculatedFromShippingBin",
+                transactionId: transactionId
             );
 
             totalShippingIncome += totalAmount;
@@ -64,7 +68,12 @@ public class IncomeEvents
 
         if (totalShippingIncome > 0)
         {
-            this.ledgerService.SuppressNextIncomeAmount(totalShippingIncome);
+            this.ledgerService.SuppressNextIncomeAmount(
+                totalShippingIncome,
+                reason: "KnownShippingBinIncome",
+                source: "Shipping Bin",
+                transactionId: $"shipping_total_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}"
+            );
 
             this.monitor.Log(
                 $"Suppressed next income fallback for pending shipping payout: {totalShippingIncome}g",

@@ -22,4 +22,8 @@ public class LedgerEntry
     public int Amount { get; set; }
 
     public int TimeOfDay { get; set; }
+
+    public string DataOrigin { get; set; } = "";
+
+    public string TransactionId { get; set; } = "";
 }

@@ -19,8 +19,8 @@ public class LedgerService
 
     public const string UnclassifiedIncomeItemId = "RC.UnclassifiedIncome";
 
-    private int suppressedExpenseAmount = 0;
-    private int suppressedIncomeAmount = 0;
+    private readonly List<SuppressionToken> suppressedExpenseTokens = new();
+    private readonly List<SuppressionToken> suppressedIncomeTokens = new();
 
     private string? loadedSaveId = null;
 
@@ -40,8 +40,7 @@ public class LedgerService
         {
             this.data = new SaveData();
             this.loadedSaveId = null;
-            this.suppressedExpenseAmount = 0;
-            this.suppressedIncomeAmount = 0;
+            this.ClearSuppressionTokens();
 
             this.monitor.Log(
                 "Ledger initialized before save data was ready.",
@@ -58,8 +57,7 @@ public class LedgerService
         this.EnsureCollections();
 
         this.loadedSaveId = this.GetCurrentSaveId();
-        this.suppressedExpenseAmount = 0;
-        this.suppressedIncomeAmount = 0;
+        this.ClearSuppressionTokens();
 
         this.monitor.Log(
             $"Ledger loaded from save data for save {this.loadedSaveId}.",
@@ -290,7 +288,9 @@ public class LedgerService
         string itemName,
         int quantity,
         int amount,
-        string itemId = ""
+        string itemId = "",
+        string dataOrigin = "",
+        string transactionId = ""
     )
     {
         this.EnsureLoadedForCurrentSave();
@@ -309,13 +309,15 @@ public class LedgerService
             ItemId = itemId,
             Quantity = quantity,
             Amount = amount,
-            TimeOfDay = Game1.timeOfDay
+            TimeOfDay = Game1.timeOfDay,
+            DataOrigin = dataOrigin,
+            TransactionId = transactionId
         };
 
         this.data.Ledger.Add(entry);
 
         this.monitor.Log(
-            $"Income recorded in memory: {itemName} x{quantity} = {amount}g from {source}",
+            $"Income recorded in memory: {itemName} x{quantity} = {amount}g from {source} [{dataOrigin}]",
             LogLevel.Trace
         );
     }
@@ -327,7 +329,8 @@ public class LedgerService
             I18n.Get("income.unclassified_channel"),
             1,
             amount,
-            UnclassifiedIncomeItemId
+            UnclassifiedIncomeItemId,
+            "ObservedMoneyIncreaseFallback"
         );
     }
 
@@ -336,7 +339,9 @@ public class LedgerService
         string itemName,
         int quantity,
         int amount,
-        string itemId = ""
+        string itemId = "",
+        string dataOrigin = "",
+        string transactionId = ""
     )
     {
         this.EnsureLoadedForCurrentSave();
@@ -355,13 +360,15 @@ public class LedgerService
             ItemId = itemId,
             Quantity = quantity,
             Amount = amount,
-            TimeOfDay = Game1.timeOfDay
+            TimeOfDay = Game1.timeOfDay,
+            DataOrigin = dataOrigin,
+            TransactionId = transactionId
         };
 
         this.data.Ledger.Add(entry);
 
         this.monitor.Log(
-            $"Expense recorded in memory: {itemName} x{quantity} = {amount}g from {source}",
+            $"Expense recorded in memory: {itemName} x{quantity} = {amount}g from {source} [{dataOrigin}]",
             LogLevel.Trace
         );
     }
@@ -369,7 +376,9 @@ public class LedgerService
     public void AddExpenseOffset(
         string source,
         string itemName,
-        int amount
+        int amount,
+        string dataOrigin = "",
+        string transactionId = ""
     )
     {
         this.EnsureLoadedForCurrentSave();
@@ -388,13 +397,15 @@ public class LedgerService
             ItemId = "",
             Quantity = 1,
             Amount = amount,
-            TimeOfDay = Game1.timeOfDay
+            TimeOfDay = Game1.timeOfDay,
+            DataOrigin = dataOrigin,
+            TransactionId = transactionId
         };
 
         this.data.Ledger.Add(entry);
 
         this.monitor.Log(
-            $"Expense offset recorded in memory: {itemName} = +{amount}g from {source}",
+            $"Expense offset recorded in memory: {itemName} = +{amount}g from {source} [{dataOrigin}]",
             LogLevel.Trace
         );
     }
@@ -410,11 +421,15 @@ public class LedgerService
         if (amount <= 0)
             return;
 
+        string transactionId = $"obligation_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}_{Guid.NewGuid():N}";
+
         this.AddExpense(
             source,
             category,
             1,
-            amount
+            amount,
+            dataOrigin: "TaxObligation",
+            transactionId: transactionId
         );
 
         int availableMoney = Game1.player.Money;
@@ -428,7 +443,12 @@ public class LedgerService
 
         if (paidAmount > 0)
         {
-            this.SuppressNextExpenseAmount(paidAmount);
+            this.SuppressNextExpenseAmount(
+                paidAmount,
+                reason: "TaxObligationPayment",
+                source: source,
+                transactionId: transactionId
+            );
 
             Game1.player.Money -= paidAmount;
 
@@ -480,56 +500,130 @@ public class LedgerService
         return paidAmount;
     }
 
-    public void SuppressNextExpenseAmount(int amount)
+    public void SuppressNextExpenseAmount(
+        int amount,
+        string reason = "LegacyExpenseSuppression",
+        string source = "",
+        string transactionId = ""
+    )
     {
-        if (amount <= 0)
-            return;
-
-        this.suppressedExpenseAmount += amount;
+        this.AddSuppressionToken(
+            this.suppressedExpenseTokens,
+            "Expense",
+            amount,
+            reason,
+            source,
+            transactionId
+        );
     }
 
     public int ConsumeSuppressedExpenseAmount(int expenseAmount)
     {
-        if (expenseAmount <= 0)
-            return 0;
-
-        if (this.suppressedExpenseAmount <= 0)
-            return 0;
-
-        int consumedAmount = Math.Min(
-            expenseAmount,
-            this.suppressedExpenseAmount
+        return this.ConsumeSuppressionTokens(
+            this.suppressedExpenseTokens,
+            expenseAmount
         );
-
-        this.suppressedExpenseAmount -= consumedAmount;
-
-        return consumedAmount;
     }
 
-    public void SuppressNextIncomeAmount(int amount)
+    public void SuppressNextIncomeAmount(
+        int amount,
+        string reason = "LegacyIncomeSuppression",
+        string source = "",
+        string transactionId = ""
+    )
     {
-        if (amount <= 0)
-            return;
-
-        this.suppressedIncomeAmount += amount;
+        this.AddSuppressionToken(
+            this.suppressedIncomeTokens,
+            "Income",
+            amount,
+            reason,
+            source,
+            transactionId
+        );
     }
 
     public int ConsumeSuppressedIncomeAmount(int incomeAmount)
     {
-        if (incomeAmount <= 0)
-            return 0;
-
-        if (this.suppressedIncomeAmount <= 0)
-            return 0;
-
-        int consumedAmount = Math.Min(
-            incomeAmount,
-            this.suppressedIncomeAmount
+        return this.ConsumeSuppressionTokens(
+            this.suppressedIncomeTokens,
+            incomeAmount
         );
+    }
 
-        this.suppressedIncomeAmount -= consumedAmount;
+    private void AddSuppressionToken(
+        List<SuppressionToken> tokens,
+        string type,
+        int amount,
+        string reason,
+        string source,
+        string transactionId
+    )
+    {
+        if (amount <= 0)
+            return;
 
-        return consumedAmount;
+        var token = new SuppressionToken
+        {
+            Amount = amount,
+            RemainingAmount = amount,
+            Type = type,
+            Reason = reason,
+            Source = source,
+            TransactionId = transactionId,
+            Year = Context.IsWorldReady ? Game1.year : 0,
+            Season = Context.IsWorldReady ? Game1.currentSeason : "",
+            Day = Context.IsWorldReady ? Game1.dayOfMonth : 0,
+            TimeOfDay = Context.IsWorldReady ? Game1.timeOfDay : 0
+        };
+
+        tokens.Add(token);
+
+        this.monitor.Log(
+            $"Suppression token added: {type} {amount}g, reason={reason}, source={source}, tx={transactionId}",
+            LogLevel.Trace
+        );
+    }
+
+    private int ConsumeSuppressionTokens(
+        List<SuppressionToken> tokens,
+        int amount
+    )
+    {
+        if (amount <= 0)
+            return 0;
+
+        int remainingToConsume = amount;
+        int consumedTotal = 0;
+
+        while (remainingToConsume > 0 && tokens.Count > 0)
+        {
+            SuppressionToken token = tokens[0];
+
+            int consumed = Math.Min(
+                remainingToConsume,
+                token.RemainingAmount
+            );
+
+            token.RemainingAmount -= consumed;
+            remainingToConsume -= consumed;
+            consumedTotal += consumed;
+
+            this.monitor.Log(
+                $"Suppression token consumed: {token.Type} {consumed}g/{token.Amount}g, reason={token.Reason}, source={token.Source}, tx={token.TransactionId}",
+                LogLevel.Trace
+            );
+
+            if (token.RemainingAmount <= 0)
+                tokens.RemoveAt(0);
+        }
+
+        return consumedTotal;
+    }
+
+    private void ClearSuppressionTokens()
+    {
+        this.suppressedExpenseTokens.Clear();
+        this.suppressedIncomeTokens.Clear();
     }
 
     public void Clear()
@@ -543,8 +637,7 @@ public class LedgerService
         this.data.SignedTaxNoticeIds.Clear();
         this.data.HealthInsuranceClaims.Clear();
         this.data.OutstandingBalance = 0;
-        this.suppressedExpenseAmount = 0;
-        this.suppressedIncomeAmount = 0;
+        this.ClearSuppressionTokens();
 
         this.Save();
 

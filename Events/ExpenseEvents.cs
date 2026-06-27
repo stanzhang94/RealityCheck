@@ -156,7 +156,8 @@ public class ExpenseEvents
                 "Harvey Medical Clinic",
                 "Medical Expenses",
                 1,
-                expenseAmount
+                expenseAmount,
+                dataOrigin: "InferredMedicalExpense"
             );
 
             this.monitor.Log(
@@ -175,7 +176,8 @@ public class ExpenseEvents
             "Base Game",
             "Base Game Expenses",
             1,
-            expenseAmount
+            expenseAmount,
+            dataOrigin: "ObservedMoneyDecrease"
         );
 
         this.monitor.Log(
@@ -306,14 +308,21 @@ public class ExpenseEvents
         if (claim.CoverageAmount <= 0)
             return;
 
-        this.ledgerService.SuppressNextIncomeAmount(claim.CoverageAmount);
+        this.ledgerService.SuppressNextIncomeAmount(
+            claim.CoverageAmount,
+            reason: "HealthInsuranceCoverage",
+            source: "Harvey Medical Clinic",
+            transactionId: claim.Id
+        );
 
         Game1.player.Money += claim.CoverageAmount;
 
         this.ledgerService.AddExpenseOffset(
             "Harvey Medical Clinic",
             "Health Insurance Coverage",
-            claim.CoverageAmount
+            claim.CoverageAmount,
+            dataOrigin: "ModGeneratedExpenseOffset",
+            transactionId: claim.Id
         );
 
         this.ledgerService.MarkHealthInsuranceClaimProcessed(
@@ -371,7 +380,11 @@ public class ExpenseEvents
             return;
         }
 
-        this.ledgerService.SuppressNextExpenseAmount(amount);
+        this.ledgerService.SuppressNextExpenseAmount(
+            amount,
+            reason: "ModGeneratedExpense",
+            source: "Reality Check"
+        );
 
         Game1.player.Money -= amount;
 
@@ -379,7 +392,8 @@ public class ExpenseEvents
             "Reality Check",
             expenseName,
             1,
-            amount
+            amount,
+            dataOrigin: "ModGeneratedExpense"
         );
 
         this.monitor.Log(

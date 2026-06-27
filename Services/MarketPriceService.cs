@@ -97,11 +97,11 @@ public class MarketPriceService
                 continue;
             }
 
-            if (baseUnitPrice <= 0)
+            if (baseUnitPrice < 10)
                 continue;
 
             double multiplier = this.GetShadowPriceMultiplier();
-            double marketUnitPrice = Math.Max(0.0, baseUnitPrice * multiplier);
+            int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
 
             entries.Add(
                 new MarketPriceTableEntry
@@ -175,6 +175,25 @@ public class MarketPriceService
             item,
             quantity,
             baseUnitPrice
+        );
+    }
+
+    public int CalculateMarketUnitPrice(
+        int baseUnitPrice,
+        double multiplier
+    )
+    {
+        if (baseUnitPrice <= 0)
+            return 0;
+
+        double safeMultiplier = Math.Max(0.0, multiplier);
+
+        return Math.Max(
+            0,
+            (int)Math.Round(
+                baseUnitPrice * safeMultiplier,
+                MidpointRounding.AwayFromZero
+            )
         );
     }
 

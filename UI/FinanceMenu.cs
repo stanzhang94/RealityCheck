@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -670,12 +669,15 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         if (double.IsNaN(price) || double.IsInfinity(price) || price < 0)
             return "0g";
 
-        double roundedInteger = Math.Round(price);
+        int roundedPrice = Math.Max(
+            0,
+            (int)Math.Round(
+                price,
+                MidpointRounding.AwayFromZero
+            )
+        );
 
-        if (Math.Abs(price - roundedInteger) < 0.0001)
-            return $"{(int)roundedInteger}g";
-
-        return $"{price.ToString("0.##", CultureInfo.InvariantCulture)}g";
+        return $"{roundedPrice}g";
     }
 
     private Color GetMarketMultiplierColor(double multiplier)

@@ -19,6 +19,7 @@ public class ModEntry : Mod
     private ConfigService? configService;
     private MarketPriceService? marketPriceService;
     private ArtisanIdentityService? artisanIdentityService;
+    private MarketCategoryResolver? marketCategoryResolver;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
 
@@ -42,12 +43,17 @@ public class ModEntry : Mod
             this.ledgerService
         );
 
-        this.marketPriceService = new MarketPriceService(
-            this.configService,
+        this.artisanIdentityService = new ArtisanIdentityService(
             this.Monitor
         );
 
-        this.artisanIdentityService = new ArtisanIdentityService(
+        this.marketCategoryResolver = new MarketCategoryResolver(
+            this.artisanIdentityService
+        );
+
+        this.marketPriceService = new MarketPriceService(
+            this.configService,
+            this.marketCategoryResolver,
             this.Monitor
         );
 

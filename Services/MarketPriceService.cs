@@ -10,17 +10,18 @@ namespace RealityCheck.Services;
 
 public class MarketPriceService
 {
-    private const int MinimumMarketManagedBaseUnitPrice = 10;
-
     private readonly ConfigService configService;
+    private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly IMonitor monitor;
 
     public MarketPriceService(
         ConfigService configService,
+        MarketCategoryResolver marketCategoryResolver,
         IMonitor monitor
     )
     {
         this.configService = configService;
+        this.marketCategoryResolver = marketCategoryResolver;
         this.monitor = monitor;
     }
 
@@ -39,21 +40,6 @@ public class MarketPriceService
         return this.configService.Config.Market.EnableShippingBinMarketSettlement;
     }
 
-
-    private static readonly HashSet<int> MarketPriceCategoryWhitelist = new()
-    {
-        -2,  // Gem
-        -4,  // Fish
-        -5,  // Egg
-        -6,  // Milk
-        -15, // Metal Resource
-        -16, // Building Resource
-        -26, // Artisan Goods
-        -75, // Vegetable
-        -79, // Fruit
-        -80, // Flower
-        -81  // Forage / Greens
-    };
 
     public List<MarketPriceTableEntry> GetSellableObjectMarketPriceTable(
         IEnumerable<LedgerEntry>? ledgerEntries = null
@@ -162,7 +148,7 @@ public class MarketPriceService
 
             int baseUnitPrice = Math.Max(0, entry.BaseUnitPrice);
 
-            if (baseUnitPrice < MinimumMarketManagedBaseUnitPrice)
+            if (baseUnitPrice < MarketCategoryResolver.MinimumMarketManagedBaseUnitPrice)
                 continue;
 
             int marketUnitPrice = this.CalculateMarketUnitPrice(
@@ -214,15 +200,7 @@ public class MarketPriceService
 
     private bool IsGenericFlavoredArtisanTemplate(Item item)
     {
-        string itemId = item.QualifiedItemId ?? string.Empty;
-
-        return string.Equals(itemId, "(O)342", StringComparison.OrdinalIgnoreCase)  // Pickles
-            || string.Equals(itemId, "(O)344", StringComparison.OrdinalIgnoreCase)  // Jelly
-            || string.Equals(itemId, "(O)348", StringComparison.OrdinalIgnoreCase)  // Wine
-            || string.Equals(itemId, "(O)350", StringComparison.OrdinalIgnoreCase)  // Juice
-            || string.Equals(itemId, "(O)SmokedFish", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(itemId, "(O)DriedMushrooms", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(itemId, "(O)DriedFruit", StringComparison.OrdinalIgnoreCase);
+        return this.marketCategoryResolver.IsGenericFlavoredArtisanTemplate(item);
     }
 
     private Item? TryCreateIconItem(string itemId)
@@ -246,24 +224,10 @@ public class MarketPriceService
         int baseUnitPrice
     )
     {
-        if (item is null)
-            return false;
-
-        if (baseUnitPrice < MinimumMarketManagedBaseUnitPrice)
-            return false;
-
-        if (!MarketPriceCategoryWhitelist.Contains(item.Category))
-            return false;
-
-        // Slime eggs are technically sellable, but they are special monster/slime-hutch items,
-        // not normal farm-market commodities. Keep them out even if the game categorizes them like eggs.
-        if (!string.IsNullOrWhiteSpace(item.Name)
-            && item.Name.Contains("Slime Egg", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return true;
+        return this.marketCategoryResolver.ShouldApplyMarketPricing(
+            item,
+            baseUnitPrice
+        );
     }
 
     public MarketPriceResult GetShippingBinMarketSellPrice(

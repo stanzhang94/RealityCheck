@@ -18,6 +18,7 @@ public class ModEntry : Mod
     private HealthInsuranceNoticeService? healthInsuranceNoticeService;
     private ConfigService? configService;
     private MarketPriceService? marketPriceService;
+    private ArtisanIdentityService? artisanIdentityService;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
 
@@ -46,9 +47,14 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        this.artisanIdentityService = new ArtisanIdentityService(
+            this.Monitor
+        );
+
         this.incomeEvents = new IncomeEvents(
             this.ledgerService,
             this.marketPriceService,
+            this.artisanIdentityService,
             this.Monitor
         );
 
@@ -78,6 +84,7 @@ public class ModEntry : Mod
 
         ShopSalePatch.Initialize(
             this.ledgerService,
+            this.artisanIdentityService,
             this.Monitor
         );
 

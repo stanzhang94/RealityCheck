@@ -9,11 +9,17 @@ namespace RealityCheck.Patches;
 public static class ShopSalePatch
 {
     private static LedgerService? ledgerService;
+    private static ArtisanIdentityService? artisanIdentityService;
     private static IMonitor? monitor;
 
-    public static void Initialize(LedgerService service, IMonitor modMonitor)
+    public static void Initialize(
+        LedgerService service,
+        ArtisanIdentityService identityService,
+        IMonitor modMonitor
+    )
     {
         ledgerService = service;
+        artisanIdentityService = identityService;
         monitor = modMonitor;
     }
 
@@ -69,6 +75,10 @@ public static class ShopSalePatch
             return;
         }
 
+        var identity = __args[0] is Item soldItemForIdentity && artisanIdentityService is not null
+            ? artisanIdentityService.Resolve(soldItemForIdentity)
+            : ArtisanIdentityService.CreateFallbackIdentity(itemId);
+
         string transactionId = $"shop_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}_{Guid.NewGuid():N}";
 
         ledgerService.SuppressNextIncomeAmount(
@@ -85,7 +95,9 @@ public static class ShopSalePatch
             amount,
             itemId,
             dataOrigin: "KnownShopSale",
-            transactionId: transactionId
+            transactionId: transactionId,
+            marketCommodityKey: identity.MarketCommodityKey,
+            parentItemId: identity.ParentItemId
         );
 
         monitor?.Log(

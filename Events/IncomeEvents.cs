@@ -13,16 +13,19 @@ public class IncomeEvents
 {
     private readonly LedgerService ledgerService;
     private readonly MarketPriceService marketPriceService;
+    private readonly ArtisanIdentityService artisanIdentityService;
     private readonly IMonitor monitor;
 
     public IncomeEvents(
         LedgerService ledgerService,
         MarketPriceService marketPriceService,
+        ArtisanIdentityService artisanIdentityService,
         IMonitor monitor
     )
     {
         this.ledgerService = ledgerService;
         this.marketPriceService = marketPriceService;
+        this.artisanIdentityService = artisanIdentityService;
         this.monitor = monitor;
     }
 
@@ -67,11 +70,15 @@ public class IncomeEvents
 
             if (!shippingGroups.TryGetValue(key, out ShippingItemGroup? group))
             {
+                var identity = this.artisanIdentityService.Resolve(item);
+
                 group = new ShippingItemGroup
                 {
                     SampleItem = item,
                     ItemName = item.DisplayName,
                     ItemId = item.QualifiedItemId,
+                    MarketCommodityKey = identity.MarketCommodityKey,
+                    ParentItemId = identity.ParentItemId,
                     BaseUnitPrice = unitPrice
                 };
 
@@ -126,7 +133,9 @@ public class IncomeEvents
                 ledgerAmount,
                 group.ItemId,
                 dataOrigin: dataOrigin,
-                transactionId: transactionId
+                transactionId: transactionId,
+                marketCommodityKey: group.MarketCommodityKey,
+                parentItemId: group.ParentItemId
             );
 
             totalVanillaShippingIncome += vanillaTotalAmount;
@@ -203,6 +212,10 @@ public class IncomeEvents
         public string ItemName { get; set; } = string.Empty;
 
         public string ItemId { get; set; } = string.Empty;
+
+        public string MarketCommodityKey { get; set; } = string.Empty;
+
+        public string ParentItemId { get; set; } = string.Empty;
 
         public int BaseUnitPrice { get; set; }
 

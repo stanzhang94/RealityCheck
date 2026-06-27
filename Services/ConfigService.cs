@@ -43,6 +43,7 @@ public class ConfigService
     {
         this.Config ??= new ModConfig();
         this.Config.Tax ??= new TaxConfig();
+        this.Config.Market ??= new MarketConfig();
         this.Config.Tax.BusinessPropertyDailyTaxRates ??= new BusinessPropertyDailyTaxRates();
         this.Config.Tax.IncomeTaxBrackets ??= new();
         this.Config.Tax.PropertyTax ??= new PropertyTaxConfig();
@@ -50,6 +51,13 @@ public class ConfigService
 
         if (this.Config.Tax.BusinessPropertyTaxThreshold <= 0)
             this.Config.Tax.BusinessPropertyTaxThreshold = 20;
+
+        if (double.IsNaN(this.Config.Market.ShadowPriceMultiplier)
+            || double.IsInfinity(this.Config.Market.ShadowPriceMultiplier)
+            || this.Config.Market.ShadowPriceMultiplier <= 0)
+        {
+            this.Config.Market.ShadowPriceMultiplier = 1.20;
+        }
 
         if (this.Config.Tax.IncomeTaxBrackets.Count == 0)
         {

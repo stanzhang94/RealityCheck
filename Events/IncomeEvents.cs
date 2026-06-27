@@ -9,11 +9,17 @@ namespace RealityCheck.Events;
 public class IncomeEvents
 {
     private readonly LedgerService ledgerService;
+    private readonly MarketPriceService marketPriceService;
     private readonly IMonitor monitor;
 
-    public IncomeEvents(LedgerService ledgerService, IMonitor monitor)
+    public IncomeEvents(
+        LedgerService ledgerService,
+        MarketPriceService marketPriceService,
+        IMonitor monitor
+    )
     {
         this.ledgerService = ledgerService;
+        this.marketPriceService = marketPriceService;
         this.monitor = monitor;
     }
 
@@ -33,6 +39,7 @@ public class IncomeEvents
         );
 
         int totalShippingIncome = 0;
+        int totalShadowMarketIncome = 0;
 
         foreach (var item in shippingBin)
         {
@@ -45,6 +52,22 @@ public class IncomeEvents
 
             if (totalAmount <= 0)
                 continue;
+
+            if (this.marketPriceService.IsShippingBinShadowPriceTestEnabled())
+            {
+                var marketPrice = this.marketPriceService.GetShippingBinShadowSellPrice(
+                    item,
+                    quantity,
+                    unitPrice
+                );
+
+                totalShadowMarketIncome += marketPrice.MarketTotal;
+
+                this.monitor.Log(
+                    $"[Market Shadow] Shipping Bin {marketPrice.ItemName} x{marketPrice.Quantity}: base {marketPrice.BaseUnitPrice}g x {marketPrice.MarketMultiplier:0.###} -> market total {marketPrice.MarketTotal}g (vanilla total {marketPrice.BaseTotal}g, diff {marketPrice.Difference:+#;-#;0}g). Not applied.",
+                    LogLevel.Info
+                );
+            }
 
             string transactionId = $"shipping_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}_{Guid.NewGuid():N}";
 
@@ -62,6 +85,16 @@ public class IncomeEvents
 
             this.monitor.Log(
                 $"Shipping income recorded: {item.DisplayName} x{quantity} = {totalAmount}g",
+                LogLevel.Info
+            );
+        }
+
+        if (this.marketPriceService.IsShippingBinShadowPriceTestEnabled() && totalShippingIncome > 0)
+        {
+            int totalDifference = totalShadowMarketIncome - totalShippingIncome;
+
+            this.monitor.Log(
+                $"[Market Shadow] Shipping Bin total: vanilla {totalShippingIncome}g -> shadow market {totalShadowMarketIncome}g (diff {totalDifference:+#;-#;0}g). Ledger/tax/money unchanged.",
                 LogLevel.Info
             );
         }

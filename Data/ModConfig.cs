@@ -7,7 +7,16 @@ public class ModConfig
 {
     public TaxConfig Tax { get; set; } = new();
 
+    public MarketConfig Market { get; set; } = new();
+
     public KeybindList OpenReportKey { get; set; } = KeybindList.Parse("O");
+}
+
+public class MarketConfig
+{
+    public bool EnableShippingBinShadowPriceTest { get; set; } = true;
+
+    public double ShadowPriceMultiplier { get; set; } = 1.20;
 }
 
 public class TaxConfig

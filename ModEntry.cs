@@ -17,6 +17,7 @@ public class ModEntry : Mod
     private ExpenseEvents? expenseEvents;
     private HealthInsuranceNoticeService? healthInsuranceNoticeService;
     private ConfigService? configService;
+    private MarketPriceService? marketPriceService;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
 
@@ -40,8 +41,14 @@ public class ModEntry : Mod
             this.ledgerService
         );
 
+        this.marketPriceService = new MarketPriceService(
+            this.configService,
+            this.Monitor
+        );
+
         this.incomeEvents = new IncomeEvents(
             this.ledgerService,
+            this.marketPriceService,
             this.Monitor
         );
 

@@ -81,11 +81,17 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        ShippingSettlementTracePatch.Initialize(
+            this.Monitor,
+            this.configService
+        );
+
         var harmony = new Harmony(
             this.ModManifest.UniqueID
         );
 
         ShopSalePatch.Apply(harmony);
+        ShippingSettlementTracePatch.Apply(harmony);
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.Saving += this.OnSaving;
@@ -101,6 +107,7 @@ public class ModEntry : Mod
 
         helper.Events.Content.AssetRequested += this.healthInsuranceNoticeService.OnAssetRequested;
 
+        helper.Events.GameLoop.DayStarted += this.OnShippingTraceDayStarted;
         helper.Events.GameLoop.DayStarted += this.taxEvents.OnDayStarted;
 
         helper.Events.Display.MenuChanged += this.taxNoticeMailRouter.OnMenuChanged;
@@ -142,5 +149,10 @@ public class ModEntry : Mod
         );
 
         Game1.playSound("bigSelect");
+    }
+
+    private void OnShippingTraceDayStarted(object? sender, DayStartedEventArgs e)
+    {
+        ShippingSettlementTracePatch.EndTraceWindow("SMAPI DayStarted");
     }
 }

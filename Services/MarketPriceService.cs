@@ -25,7 +25,17 @@ public class MarketPriceService
         return this.configService.Config.Market.EnableShippingBinShadowPriceTest;
     }
 
-    public MarketPriceResult GetShippingBinShadowSellPrice(
+    public bool IsShippingSettlementTraceEnabled()
+    {
+        return this.configService.Config.Market.EnableShippingSettlementVerboseTrace;
+    }
+
+    public bool IsShippingBinMarketSettlementEnabled()
+    {
+        return this.configService.Config.Market.EnableShippingBinMarketSettlement;
+    }
+
+    public MarketPriceResult GetShippingBinMarketSellPrice(
         Item item,
         int quantity,
         int baseUnitPrice
@@ -48,6 +58,20 @@ public class MarketPriceService
                 ? (double)marketTotal / quantity
                 : 0.0
         };
+    }
+
+
+    public MarketPriceResult GetShippingBinShadowSellPrice(
+        Item item,
+        int quantity,
+        int baseUnitPrice
+    )
+    {
+        return this.GetShippingBinMarketSellPrice(
+            item,
+            quantity,
+            baseUnitPrice
+        );
     }
 
     public int CalculateMarketTotal(

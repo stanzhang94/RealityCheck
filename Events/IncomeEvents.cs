@@ -1,3 +1,5 @@
+using System;
+using RealityCheck.Patches;
 using RealityCheck.Services;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -38,8 +40,13 @@ public class IncomeEvents
             LogLevel.Info
         );
 
-        int totalShippingIncome = 0;
-        int totalShadowMarketIncome = 0;
+        bool applyMarketSettlement = this.marketPriceService.IsShippingBinMarketSettlementEnabled();
+        bool runShadowPriceTest = this.marketPriceService.IsShippingBinShadowPriceTestEnabled()
+            || applyMarketSettlement;
+
+        int totalVanillaShippingIncome = 0;
+        int totalMarketShippingIncome = 0;
+        int totalLedgerShippingIncome = 0;
 
         foreach (var item in shippingBin)
         {
@@ -48,23 +55,37 @@ public class IncomeEvents
 
             int quantity = item.Stack;
             int unitPrice = item.sellToStorePrice(-1L);
-            int totalAmount = unitPrice * quantity;
+            int vanillaTotalAmount = unitPrice * quantity;
 
-            if (totalAmount <= 0)
+            if (vanillaTotalAmount <= 0)
                 continue;
 
-            if (this.marketPriceService.IsShippingBinShadowPriceTestEnabled())
-            {
-                var marketPrice = this.marketPriceService.GetShippingBinShadowSellPrice(
-                    item,
-                    quantity,
-                    unitPrice
-                );
+            var marketPrice = this.marketPriceService.GetShippingBinMarketSellPrice(
+                item,
+                quantity,
+                unitPrice
+            );
 
-                totalShadowMarketIncome += marketPrice.MarketTotal;
+            int ledgerAmount = applyMarketSettlement
+                ? marketPrice.MarketTotal
+                : vanillaTotalAmount;
+
+            string dataOrigin = applyMarketSettlement
+                ? "MarketShippingBinSettlement"
+                : "CalculatedFromShippingBin";
+
+            if (runShadowPriceTest)
+            {
+                string logPrefix = applyMarketSettlement
+                    ? "[Market Settlement]"
+                    : "[Market Shadow]";
+
+                string suffix = applyMarketSettlement
+                    ? "Will be used for the known Shipping Bin settlement."
+                    : "Not applied.";
 
                 this.monitor.Log(
-                    $"[Market Shadow] Shipping Bin {marketPrice.ItemName} x{marketPrice.Quantity}: base {marketPrice.BaseUnitPrice}g x {marketPrice.MarketMultiplier:0.###} -> market total {marketPrice.MarketTotal}g (vanilla total {marketPrice.BaseTotal}g, diff {marketPrice.Difference:+#;-#;0}g). Not applied.",
+                    $"{logPrefix} Shipping Bin {marketPrice.ItemName} x{marketPrice.Quantity}: base {marketPrice.BaseUnitPrice}g x {marketPrice.MarketMultiplier:0.###} -> market total {marketPrice.MarketTotal}g (vanilla total {marketPrice.BaseTotal}g, diff {marketPrice.Difference:+#;-#;0}g). {suffix}",
                     LogLevel.Info
                 );
             }
@@ -75,41 +96,73 @@ public class IncomeEvents
                 "Shipping Bin",
                 item.DisplayName,
                 quantity,
-                totalAmount,
+                ledgerAmount,
                 item.QualifiedItemId,
-                dataOrigin: "CalculatedFromShippingBin",
+                dataOrigin: dataOrigin,
                 transactionId: transactionId
             );
 
-            totalShippingIncome += totalAmount;
+            totalVanillaShippingIncome += vanillaTotalAmount;
+            totalMarketShippingIncome += marketPrice.MarketTotal;
+            totalLedgerShippingIncome += ledgerAmount;
 
-            this.monitor.Log(
-                $"Shipping income recorded: {item.DisplayName} x{quantity} = {totalAmount}g",
-                LogLevel.Info
-            );
+            if (applyMarketSettlement)
+            {
+                this.monitor.Log(
+                    $"Shipping income recorded at market settlement: {item.DisplayName} x{quantity} = {ledgerAmount}g (vanilla {vanillaTotalAmount}g)",
+                    LogLevel.Info
+                );
+            }
+            else
+            {
+                this.monitor.Log(
+                    $"Shipping income recorded: {item.DisplayName} x{quantity} = {ledgerAmount}g",
+                    LogLevel.Info
+                );
+            }
         }
 
-        if (this.marketPriceService.IsShippingBinShadowPriceTestEnabled() && totalShippingIncome > 0)
+        if (runShadowPriceTest && totalVanillaShippingIncome > 0)
         {
-            int totalDifference = totalShadowMarketIncome - totalShippingIncome;
+            int totalDifference = totalMarketShippingIncome - totalVanillaShippingIncome;
+            string logPrefix = applyMarketSettlement
+                ? "[Market Settlement]"
+                : "[Market Shadow]";
+
+            string suffix = applyMarketSettlement
+                ? "Ledger/tax use market total; original shipping payout interception is required."
+                : "Ledger/tax/money unchanged.";
 
             this.monitor.Log(
-                $"[Market Shadow] Shipping Bin total: vanilla {totalShippingIncome}g -> shadow market {totalShadowMarketIncome}g (diff {totalDifference:+#;-#;0}g). Ledger/tax/money unchanged.",
+                $"{logPrefix} Shipping Bin total: vanilla {totalVanillaShippingIncome}g -> market {totalMarketShippingIncome}g (diff {totalDifference:+#;-#;0}g). {suffix}",
                 LogLevel.Info
             );
         }
 
-        if (totalShippingIncome > 0)
+        if (totalVanillaShippingIncome > 0
+            && (applyMarketSettlement || this.marketPriceService.IsShippingSettlementTraceEnabled()))
+        {
+            ShippingSettlementTracePatch.BeginTraceWindow(
+                totalVanillaShippingIncome,
+                totalMarketShippingIncome > 0 ? totalMarketShippingIncome : totalVanillaShippingIncome
+            );
+        }
+
+        if (totalLedgerShippingIncome > 0)
         {
             this.ledgerService.SuppressNextIncomeAmount(
-                totalShippingIncome,
-                reason: "KnownShippingBinIncome",
+                totalLedgerShippingIncome,
+                reason: applyMarketSettlement
+                    ? "KnownMarketShippingBinIncome"
+                    : "KnownShippingBinIncome",
                 source: "Shipping Bin",
                 transactionId: $"shipping_total_{Game1.year}_{Game1.currentSeason}_{Game1.dayOfMonth}"
             );
 
             this.monitor.Log(
-                $"Suppressed next income fallback for pending shipping payout: {totalShippingIncome}g",
+                applyMarketSettlement
+                    ? $"Suppressed next income fallback for pending market shipping payout: {totalLedgerShippingIncome}g"
+                    : $"Suppressed next income fallback for pending shipping payout: {totalLedgerShippingIncome}g",
                 LogLevel.Info
             );
         }

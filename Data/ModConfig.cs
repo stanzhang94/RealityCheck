@@ -14,7 +14,11 @@ public class ModConfig
 
 public class MarketConfig
 {
-    public bool EnableShippingBinShadowPriceTest { get; set; } = true;
+    public bool EnableShippingBinShadowPriceTest { get; set; } = false;
+
+    public bool EnableShippingSettlementVerboseTrace { get; set; } = false;
+
+    public bool EnableShippingBinMarketSettlement { get; set; } = true;
 
     public double ShadowPriceMultiplier { get; set; } = 1.20;
 }

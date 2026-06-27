@@ -150,6 +150,27 @@ public class ExpenseEvents
         if (expenseAmount <= 0)
             return;
 
+        if (this.IsMedicalCollapseExpense())
+        {
+            this.ledgerService.AddExpense(
+                "Harvey Medical Clinic",
+                "Medical Expenses",
+                1,
+                expenseAmount
+            );
+
+            this.monitor.Log(
+                $"Medical expense recorded: {expenseAmount}g",
+                LogLevel.Info
+            );
+
+            this.CreatePendingHealthInsuranceClaim(expenseAmount);
+
+            this.recentlyCollapsedTicks = 0;
+
+            return;
+        }
+
         this.ledgerService.AddExpense(
             "Base Game",
             "Base Game Expenses",
@@ -161,17 +182,36 @@ public class ExpenseEvents
             $"Base Game expense recorded: {expenseAmount}g",
             LogLevel.Info
         );
-
-        if (this.IsMedicalCollapseExpense())
-        {
-            this.CreatePendingHealthInsuranceClaim(expenseAmount);
-
-            this.recentlyCollapsedTicks = 0;
-        }
     }
 
-    private void HandleMoneyIncrease(int incomeAmount)
+    private void HandleMoneyIncrease(int rawIncomeAmount)
     {
+        int unclassifiedIncomeAmount = rawIncomeAmount;
+
+        int suppressedAmount = this.ledgerService.ConsumeSuppressedIncomeAmount(
+            unclassifiedIncomeAmount
+        );
+
+        if (suppressedAmount > 0)
+        {
+            unclassifiedIncomeAmount -= suppressedAmount;
+
+            this.monitor.Log(
+                $"Suppressed {suppressedAmount}g from Unclassified Income.",
+                LogLevel.Info
+            );
+        }
+
+        if (unclassifiedIncomeAmount > 0)
+        {
+            this.ledgerService.AddUnclassifiedIncome(unclassifiedIncomeAmount);
+
+            this.monitor.Log(
+                $"Unclassified income recorded: {unclassifiedIncomeAmount}g",
+                LogLevel.Info
+            );
+        }
+
         int outstandingBalance = this.ledgerService.GetOutstandingBalance();
 
         if (outstandingBalance <= 0)
@@ -180,7 +220,7 @@ public class ExpenseEvents
         int currentMoney = Game1.player.Money;
 
         int recoveryAmount = Math.Min(
-            Math.Min(incomeAmount, currentMoney),
+            Math.Min(rawIncomeAmount, currentMoney),
             outstandingBalance
         );
 
@@ -265,6 +305,8 @@ public class ExpenseEvents
     {
         if (claim.CoverageAmount <= 0)
             return;
+
+        this.ledgerService.SuppressNextIncomeAmount(claim.CoverageAmount);
 
         Game1.player.Money += claim.CoverageAmount;
 

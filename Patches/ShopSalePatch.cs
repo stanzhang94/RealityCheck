@@ -46,11 +46,11 @@ public static class ShopSalePatch
         if (__args[0] is not ISalable item)
             return;
 
-string itemName = item.DisplayName;
-string itemId = __args[0] is Item soldItem ? soldItem.QualifiedItemId : "";
+        string itemName = item.DisplayName;
+        string itemId = __args[0] is Item soldItem ? soldItem.QualifiedItemId : "";
 
-int quantity = 1;
-int amount = 0;
+        int quantity = 1;
+        int amount = 0;
 
         if (__args.Length >= 2 && __args[1] is int price)
             amount = price;
@@ -60,18 +60,26 @@ int amount = 0;
 
         if (amount <= 0)
         {
-            monitor?.Log($"Shop sale detected but amount was invalid: {itemName}", LogLevel.Trace);
+            monitor?.Log(
+                $"Shop sale detected but amount was invalid: {itemName}",
+                LogLevel.Trace
+            );
             return;
         }
 
-ledgerService.AddIncome(
-    "Shop Sale",
-    itemName,
-    quantity,
-    amount,
-    itemId
-);
+        ledgerService.SuppressNextIncomeAmount(amount);
 
-        monitor?.Log($"Shop sale recorded: {itemName} x{quantity} = {amount}g", LogLevel.Info);
+        ledgerService.AddIncome(
+            "Shop Sale",
+            itemName,
+            quantity,
+            amount,
+            itemId
+        );
+
+        monitor?.Log(
+            $"Shop sale recorded: {itemName} x{quantity} = {amount}g",
+            LogLevel.Info
+        );
     }
 }

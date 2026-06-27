@@ -63,6 +63,7 @@ public static class I18n
             "Base Game Expenses" => Get("category.base_game_expenses"),
             "Health Insurance Premium" => Get("category.health_insurance_premium"),
             "Health Insurance Coverage" => Get("category.health_insurance_coverage"),
+            "Medical Expenses" => Get("category.medical_expenses"),
             "Income Tax" => Get("category.income_tax"),
             "Property Tax" => Get("category.property_tax"),
             "Business Property Tax" => Get("category.business_property_tax"),

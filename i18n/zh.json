@@ -57,11 +57,12 @@
   "tax_report.no_tax_records": "暂无税务记录。",
   "tax_report.direct_sales_note": "说明：直接卖给商人的收入视为免税现金交易。",
   "tax_history.covered_period": "Y{{year}}{{season}}{{startDay}}-{{endDay}}",
-"tax_history.settlement_date": "{{day}}",
-"tax_history.summary_line": "{{coveredPeriod}}：所得 {{income}} | 房产 {{property}} | 经营 {{business}}",
+  "tax_history.settlement_date": "{{day}}",
+  "tax_history.summary_line": "{{coveredPeriod}}：所得 {{income}} | 房产 {{property}} | 经营 {{business}}",
   "category.base_game_expenses": "原版游戏支出",
   "category.health_insurance_premium": "医保保费",
   "category.health_insurance_coverage": "医保报销",
+  "category.medical_expenses": "医疗费用",
   "category.income_tax": "所得税",
   "category.property_tax": "房产税",
   "category.business_property_tax": "经营资产税",
@@ -123,5 +124,10 @@
   "machine.loom": "织布机",
   "machine.oil_maker": "产油机",
   "machine.dehydrator": "脱水机",
-  "machine.fish_smoker": "熏鱼机"
+  "machine.fish_smoker": "熏鱼机",
+  "finance.income_details_today": "今日收入明细",
+  "finance.income_details_this_season": "本季度收入明细",
+  "finance.income_details_this_year": "本年度收入明细",
+  "finance.no_income_recorded": "暂无收入记录。",
+  "income.unclassified_channel": "未知渠道收入来源"
 }

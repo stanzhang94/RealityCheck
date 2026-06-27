@@ -62,6 +62,7 @@
   "category.base_game_expenses": "原作ゲーム支出",
   "category.health_insurance_premium": "医療保険料",
   "category.health_insurance_coverage": "医療保険給付",
+  "category.medical_expenses": "医療費",
   "category.income_tax": "所得税",
   "category.property_tax": "固定資産税",
   "category.business_property_tax": "事業用資産税",
@@ -123,5 +124,10 @@
   "machine.loom": "織機",
   "machine.oil_maker": "オイルメーカー",
   "machine.dehydrator": "乾燥機",
-  "machine.fish_smoker": "燻製器"
+  "machine.fish_smoker": "燻製器",
+  "finance.income_details_today": "本日の収入詳細",
+  "finance.income_details_this_season": "今季の収入詳細",
+  "finance.income_details_this_year": "今年の収入詳細",
+  "finance.no_income_recorded": "収入記録はありません。",
+  "income.unclassified_channel": "未分類の収入"
 }

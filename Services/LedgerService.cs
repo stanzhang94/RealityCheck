@@ -17,7 +17,10 @@ public class LedgerService
 
     private SaveData data;
 
+    public const string UnclassifiedIncomeItemId = "RC.UnclassifiedIncome";
+
     private int suppressedExpenseAmount = 0;
+    private int suppressedIncomeAmount = 0;
 
     private string? loadedSaveId = null;
 
@@ -38,6 +41,7 @@ public class LedgerService
             this.data = new SaveData();
             this.loadedSaveId = null;
             this.suppressedExpenseAmount = 0;
+            this.suppressedIncomeAmount = 0;
 
             this.monitor.Log(
                 "Ledger initialized before save data was ready.",
@@ -55,6 +59,7 @@ public class LedgerService
 
         this.loadedSaveId = this.GetCurrentSaveId();
         this.suppressedExpenseAmount = 0;
+        this.suppressedIncomeAmount = 0;
 
         this.monitor.Log(
             $"Ledger loaded from save data for save {this.loadedSaveId}.",
@@ -315,6 +320,17 @@ public class LedgerService
         );
     }
 
+    public void AddUnclassifiedIncome(int amount)
+    {
+        this.AddIncome(
+            "Unknown Channel",
+            I18n.Get("income.unclassified_channel"),
+            1,
+            amount,
+            UnclassifiedIncomeItemId
+        );
+    }
+
     public void AddExpense(
         string source,
         string itemName,
@@ -490,6 +506,32 @@ public class LedgerService
         return consumedAmount;
     }
 
+    public void SuppressNextIncomeAmount(int amount)
+    {
+        if (amount <= 0)
+            return;
+
+        this.suppressedIncomeAmount += amount;
+    }
+
+    public int ConsumeSuppressedIncomeAmount(int incomeAmount)
+    {
+        if (incomeAmount <= 0)
+            return 0;
+
+        if (this.suppressedIncomeAmount <= 0)
+            return 0;
+
+        int consumedAmount = Math.Min(
+            incomeAmount,
+            this.suppressedIncomeAmount
+        );
+
+        this.suppressedIncomeAmount -= consumedAmount;
+
+        return consumedAmount;
+    }
+
     public void Clear()
     {
         this.EnsureLoadedForCurrentSave();
@@ -502,6 +544,7 @@ public class LedgerService
         this.data.HealthInsuranceClaims.Clear();
         this.data.OutstandingBalance = 0;
         this.suppressedExpenseAmount = 0;
+        this.suppressedIncomeAmount = 0;
 
         this.Save();
 

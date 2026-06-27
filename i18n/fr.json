@@ -62,6 +62,7 @@
   "category.base_game_expenses": "Dépenses du jeu de base",
   "category.health_insurance_premium": "Prime d'assurance santé",
   "category.health_insurance_coverage": "Remboursement d'assurance santé",
+  "category.medical_expenses": "Frais médicaux",
   "category.income_tax": "Impôt sur le revenu",
   "category.property_tax": "Taxe foncière",
   "category.business_property_tax": "Taxe sur les biens d'exploitation",
@@ -123,5 +124,10 @@
   "machine.loom": "Métier à tisser",
   "machine.oil_maker": "Machine à huile",
   "machine.dehydrator": "Déshydrateur",
-  "machine.fish_smoker": "Fumoir à poisson"
+  "machine.fish_smoker": "Fumoir à poisson",
+  "finance.income_details_today": "Détails des revenus aujourd'hui",
+  "finance.income_details_this_season": "Détails des revenus cette saison",
+  "finance.income_details_this_year": "Détails des revenus cette année",
+  "finance.no_income_recorded": "Aucun revenu enregistré.",
+  "income.unclassified_channel": "Revenu non classé"
 }

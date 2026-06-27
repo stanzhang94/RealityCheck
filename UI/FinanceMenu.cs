@@ -282,7 +282,7 @@ public class FinanceMenu : IClickableMenu
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            I18n.Get("finance.items_sold_today"),
+            I18n.Get("finance.income_details_today"),
             this.analyticsService.GetTodayItemSummaries(),
             I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetTodayExpenseBreakdown(),
@@ -311,7 +311,7 @@ this.DrawLine(b, I18n.Get("finance.seasonal_income", new { amount = $"{this.anal
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            I18n.Get("finance.items_sold_this_season"),
+            I18n.Get("finance.income_details_this_season"),
             this.analyticsService.GetSeasonItemSummaries(),
             I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetSeasonExpenseBreakdown(),
@@ -376,7 +376,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
         y = this.DrawItemAndExpenseColumns(
             b,
-            I18n.Get("finance.items_sold_this_year"),
+            I18n.Get("finance.income_details_this_year"),
             this.analyticsService.GetYearItemSummaries(),
             I18n.Get("finance.expense_breakdown"),
             this.analyticsService.GetYearExpenseBreakdown(),
@@ -517,7 +517,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
         if (items.Count == 0)
         {
-            this.DrawLine(b, I18n.Get("finance.no_sales_recorded"), leftX, leftY);
+            this.DrawLine(b, I18n.Get("finance.no_income_recorded"), leftX, leftY);
             leftY += 35;
         }
         else
@@ -849,6 +849,20 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawItemSummaryLine(SpriteBatch b, ItemSummary item, int x, int y)
     {
+        if (item.ItemId == LedgerService.UnclassifiedIncomeItemId)
+        {
+            string unclassifiedDisplayName = I18n.Get("income.unclassified_channel");
+
+            this.DrawLine(
+                b,
+                $"{unclassifiedDisplayName}   {item.Amount}g",
+                x,
+                y
+            );
+
+            return;
+        }
+
         int textX = x;
         string displayName = item.ItemName;
 

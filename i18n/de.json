@@ -62,6 +62,7 @@
   "category.base_game_expenses": "Ausgaben des Grundspiels",
   "category.health_insurance_premium": "Krankenversicherungsbeitrag",
   "category.health_insurance_coverage": "Krankenversicherungserstattung",
+  "category.medical_expenses": "Medizinische Kosten",
   "category.income_tax": "Einkommensteuer",
   "category.property_tax": "Grundsteuer",
   "category.business_property_tax": "Betriebsvermögenssteuer",
@@ -123,5 +124,10 @@
   "machine.loom": "Webstuhl",
   "machine.oil_maker": "Ölpresse",
   "machine.dehydrator": "Dörrgerät",
-  "machine.fish_smoker": "Fischräucherofen"
+  "machine.fish_smoker": "Fischräucherofen",
+  "finance.income_details_today": "Einnahmendetails heute",
+  "finance.income_details_this_season": "Einnahmendetails dieser Saison",
+  "finance.income_details_this_year": "Einnahmendetails dieses Jahr",
+  "finance.no_income_recorded": "Keine Einnahmen aufgezeichnet.",
+  "income.unclassified_channel": "Nicht klassifizierte Einnahmen"
 }

@@ -28,9 +28,11 @@ public class IncomeEvents
         var shippingBin = farm.getShippingBin(Game1.player);
 
         this.monitor.Log(
-    $"Shipping bin contains {shippingBin.Count} items at day ending.",
-    LogLevel.Info
-);
+            $"Shipping bin contains {shippingBin.Count} items at day ending.",
+            LogLevel.Info
+        );
+
+        int totalShippingIncome = 0;
 
         foreach (var item in shippingBin)
         {
@@ -44,16 +46,28 @@ public class IncomeEvents
             if (totalAmount <= 0)
                 continue;
 
-this.ledgerService.AddIncome(
-    "Shipping Bin",
-    item.DisplayName,
-    quantity,
-    totalAmount,
-    item.QualifiedItemId
-);
+            this.ledgerService.AddIncome(
+                "Shipping Bin",
+                item.DisplayName,
+                quantity,
+                totalAmount,
+                item.QualifiedItemId
+            );
+
+            totalShippingIncome += totalAmount;
 
             this.monitor.Log(
                 $"Shipping income recorded: {item.DisplayName} x{quantity} = {totalAmount}g",
+                LogLevel.Info
+            );
+        }
+
+        if (totalShippingIncome > 0)
+        {
+            this.ledgerService.SuppressNextIncomeAmount(totalShippingIncome);
+
+            this.monitor.Log(
+                $"Suppressed next income fallback for pending shipping payout: {totalShippingIncome}g",
                 LogLevel.Info
             );
         }

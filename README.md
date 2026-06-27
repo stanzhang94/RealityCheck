@@ -49,6 +49,7 @@ Current behavior:
 - Collapse or death-related medical expenses are detected from actual money loss
 - Insurance reimbursement is processed the next morning
 - Harvey Medical Clinic sends an insurance claim notice
+- Collapse or death-related medical charges are recorded as **Medical Expenses**
 - Reimbursement is recorded as an expense offset, not income
 
 ### Financial reports
@@ -64,6 +65,10 @@ Reality Check tracks and displays financial information through in-game reports,
 - Expense details
 - Outstanding balance
 
+Known sales are shown with item details when Reality Check can identify the item, quantity, and amount. Starting in 1.2.3, unexplained money gains are also recorded as **Unclassified Income** so the financial reports better reflect overall cash inflow.
+
+Unclassified Income is used when Reality Check can see that the player's money increased, but cannot reliably identify the exact source, item, buyer, or external mod system behind that money. It is shown in financial reports, but it does **not** affect Income Tax.
+
 The goal is not to replace every shop receipt in the game, but to give the player a clear picture of long-term financial pressure.
 
 ### Outstanding balance
@@ -71,6 +76,16 @@ The goal is not to replace every shop receipt in the game, but to give the playe
 If a Reality Check obligation cannot be paid immediately, the unpaid amount becomes outstanding balance.
 
 Outstanding balance is not shown inside the Tax Notice itself. It belongs to the broader financial report system.
+
+## Version 1.2.3
+
+- Added global income fallback tracking.
+- Unexplained money gains are now recorded as **Unclassified Income** in financial reports.
+- Known sales still show item details when available.
+- Unclassified Income does not affect Income Tax.
+- Health insurance reimbursements remain expense offsets and are not counted as income.
+- Collapse or death-related medical charges are now categorized as **Medical Expenses** instead of Base Game Expenses.
+
 
 ## Requirements
 

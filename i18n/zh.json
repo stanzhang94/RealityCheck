@@ -129,5 +129,13 @@
   "finance.income_details_this_season": "本季度收入明细",
   "finance.income_details_this_year": "本年度收入明细",
   "finance.no_income_recorded": "暂无收入记录。",
-  "income.unclassified_channel": "未知渠道收入来源"
+  "income.unclassified_channel": "未知渠道收入来源",
+  "tab.market_price": "市场价格",
+  "market_price.title": "市场价格",
+  "market_price.multiplier_note": "当前测试倍率：x{{multiplier}}",
+  "market_price.header_item": "物品",
+  "market_price.header_market_price": "市场售价",
+  "market_price.header_base_price": "原价",
+  "market_price.header_multiplier": "倍率",
+  "market_price.no_items": "未找到可出售物品。"
 }

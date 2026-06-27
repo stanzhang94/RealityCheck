@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -15,6 +16,7 @@ public class FinanceMenu : IClickableMenu
 {
     private readonly AnalyticsService analyticsService;
     private readonly TaxService taxService;
+    private readonly MarketPriceService marketPriceService;
 
     private ReportTab currentTab = ReportTab.Daily;
 
@@ -25,12 +27,27 @@ public class FinanceMenu : IClickableMenu
     private int contentStartY;
     private int currentContentHeight = 0;
 
+    private List<MarketPriceTableEntry>? marketPriceEntries;
+
+    private MarketPriceSortMode marketPriceSortMode = MarketPriceSortMode.MarketPrice;
+
+    private bool marketPriceSortDescending = true;
+
+    private Rectangle marketPriceItemHeaderBounds;
+
+    private Rectangle marketPriceMarketHeaderBounds;
+
+    private Rectangle marketPriceBaseHeaderBounds;
+
+    private Rectangle marketPriceMultiplierHeaderBounds;
+
     private Rectangle previousScissorRectangle;
 
     private readonly Rectangle dailyTab;
     private readonly Rectangle seasonalTab;
     private readonly Rectangle annualTab;
     private readonly Rectangle taxTab;
+    private readonly Rectangle marketTab;
 
     private readonly Color chartColor = new Color(92, 63, 34);
 
@@ -39,29 +56,49 @@ public class FinanceMenu : IClickableMenu
         Daily,
         Seasonal,
         Annual,
-        Tax
+        Tax,
+        Market
+    }
+
+    private enum MarketPriceSortMode
+    {
+        ItemName,
+        MarketPrice,
+        BasePrice,
+        Multiplier
     }
 
     public FinanceMenu(
         LedgerService ledgerService,
-        AnalyticsService analyticsService
+        AnalyticsService analyticsService,
+        MarketPriceService marketPriceService
     )
     {
         this.analyticsService = analyticsService;
         this.taxService = new TaxService(ledgerService);
+        this.marketPriceService = marketPriceService;
 
         int x = Game1.uiViewport.Width / 2 - 400;
         int y = Game1.uiViewport.Height / 2 - 300;
 
-        this.dailyTab = new Rectangle(x + 35, y + 25, 150, 55);
-        this.seasonalTab = new Rectangle(x + 195, y + 25, 185, 55);
-        this.annualTab = new Rectangle(x + 390, y + 25, 150, 55);
-        this.taxTab = new Rectangle(x + 550, y + 25, 155, 55);
+        this.dailyTab = new Rectangle(x + 35, y + 25, 105, 55);
+        this.seasonalTab = new Rectangle(x + 145, y + 25, 130, 55);
+        this.annualTab = new Rectangle(x + 280, y + 25, 115, 55);
+        this.taxTab = new Rectangle(x + 400, y + 25, 145, 55);
+        this.marketTab = new Rectangle(x + 550, y + 25, 190, 55);
     }
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
     {
         base.receiveLeftClick(x, y, playSound);
+
+        if (this.currentTab == ReportTab.Market && this.TryHandleMarketPriceHeaderClick(x, y))
+        {
+            if (playSound)
+                Game1.playSound("smallSelect");
+
+            return;
+        }
 
         if (this.dailyTab.Contains(x, y))
         {
@@ -85,6 +122,13 @@ public class FinanceMenu : IClickableMenu
         {
             this.currentTab = ReportTab.Tax;
             this.scrollOffset = 0;
+            Game1.playSound("smallSelect");
+        }
+        else if (this.marketTab.Contains(x, y))
+        {
+            this.currentTab = ReportTab.Market;
+            this.scrollOffset = 0;
+            this.marketPriceEntries = null;
             Game1.playSound("smallSelect");
         }
     }
@@ -164,6 +208,10 @@ public class FinanceMenu : IClickableMenu
             case ReportTab.Tax:
                 this.DrawTaxReport(b, contentX, contentY);
                 break;
+
+            case ReportTab.Market:
+                this.DrawMarketPriceReport(b, contentX, contentY);
+                break;
         }
 
         this.EndContentClip(b);
@@ -240,6 +288,7 @@ public class FinanceMenu : IClickableMenu
         this.DrawTab(b, this.seasonalTab, I18n.Get("tab.seasonal"), this.currentTab == ReportTab.Seasonal);
         this.DrawTab(b, this.annualTab, I18n.Get("tab.annual"), this.currentTab == ReportTab.Annual);
         this.DrawTab(b, this.taxTab, I18n.Get("tab.tax_report"), this.currentTab == ReportTab.Tax);
+        this.DrawTab(b, this.marketTab, I18n.Get("tab.market_price"), this.currentTab == ReportTab.Market);
     }
 
     private void DrawTab(SpriteBatch b, Rectangle rect, string label, bool active)
@@ -421,6 +470,245 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         );
 
         this.UpdateContentHeight(y + 150);
+    }
+
+    private bool TryHandleMarketPriceHeaderClick(int x, int y)
+    {
+        if (this.marketPriceItemHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.ItemName);
+
+        if (this.marketPriceMarketHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.MarketPrice);
+
+        if (this.marketPriceBaseHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.BasePrice);
+
+        if (this.marketPriceMultiplierHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.Multiplier);
+
+        return false;
+    }
+
+    private bool SetMarketPriceSort(MarketPriceSortMode mode)
+    {
+        if (this.marketPriceSortMode == mode)
+        {
+            this.marketPriceSortDescending = !this.marketPriceSortDescending;
+        }
+        else
+        {
+            this.marketPriceSortMode = mode;
+            this.marketPriceSortDescending = mode != MarketPriceSortMode.ItemName;
+        }
+
+        this.scrollOffset = 0;
+
+        return true;
+    }
+
+    private List<MarketPriceTableEntry> GetSortedMarketPriceEntries()
+    {
+        this.marketPriceEntries ??= this.marketPriceService.GetSellableObjectMarketPriceTable();
+
+        IEnumerable<MarketPriceTableEntry> sorted = this.marketPriceSortMode switch
+        {
+            MarketPriceSortMode.ItemName => this.marketPriceEntries.OrderBy(e => e.ItemName, StringComparer.CurrentCulture),
+            MarketPriceSortMode.BasePrice => this.marketPriceEntries.OrderBy(e => e.BaseUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+            MarketPriceSortMode.Multiplier => this.marketPriceEntries.OrderBy(e => e.MarketMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+            _ => this.marketPriceEntries.OrderBy(e => e.MarketUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture)
+        };
+
+        if (this.marketPriceSortDescending)
+            sorted = this.marketPriceSortMode switch
+            {
+                MarketPriceSortMode.ItemName => this.marketPriceEntries.OrderByDescending(e => e.ItemName, StringComparer.CurrentCulture),
+                MarketPriceSortMode.BasePrice => this.marketPriceEntries.OrderByDescending(e => e.BaseUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+                MarketPriceSortMode.Multiplier => this.marketPriceEntries.OrderByDescending(e => e.MarketMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+                _ => this.marketPriceEntries.OrderByDescending(e => e.MarketUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture)
+            };
+
+        return sorted.ToList();
+    }
+
+    private string GetMarketPriceSortLabel(MarketPriceSortMode mode)
+    {
+        if (this.marketPriceSortMode != mode)
+            return string.Empty;
+
+        if (mode == MarketPriceSortMode.ItemName)
+            return this.marketPriceSortDescending ? " Z-A" : " A-Z";
+
+        return this.marketPriceSortDescending ? " 高-低" : " 低-高";
+    }
+
+    private void DrawMarketPriceReport(SpriteBatch b, int x, int y)
+    {
+        this.DrawLine(b, I18n.Get("market_price.title"), x, y);
+        y += 45;
+
+        this.DrawLine(
+            b,
+            I18n.Get(
+                "market_price.multiplier_note",
+                new { multiplier = this.FormatMultiplier(this.marketPriceService.GetShadowPriceMultiplier()) }
+            ),
+            x,
+            y
+        );
+
+        y += 45;
+
+        this.DrawMarketPriceHeader(b, x, y);
+        y += 40;
+
+        List<MarketPriceTableEntry> entries = this.GetSortedMarketPriceEntries();
+
+        if (entries.Count == 0)
+        {
+            this.DrawLine(b, I18n.Get("market_price.no_items"), x, y);
+            y += 35;
+            this.UpdateContentHeight(y + 80);
+            return;
+        }
+
+        foreach (MarketPriceTableEntry entry in entries)
+        {
+            this.DrawMarketPriceLine(b, entry, x, y);
+            y += 42;
+        }
+
+        this.UpdateContentHeight(y + 80);
+    }
+
+    private void DrawMarketPriceHeader(SpriteBatch b, int x, int y)
+    {
+        this.marketPriceItemHeaderBounds = new Rectangle(x + 55, y - 5, 220, 35);
+        this.marketPriceMarketHeaderBounds = new Rectangle(x + 295, y - 5, 120, 35);
+        this.marketPriceBaseHeaderBounds = new Rectangle(x + 430, y - 5, 100, 35);
+        this.marketPriceMultiplierHeaderBounds = new Rectangle(x + 540, y - 5, 130, 35);
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.header_item") + this.GetMarketPriceSortLabel(MarketPriceSortMode.ItemName),
+            x + 55,
+            y
+        );
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.header_market_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.MarketPrice),
+            x + 295,
+            y
+        );
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.header_base_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.BasePrice),
+            x + 430,
+            y
+        );
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.header_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.Multiplier),
+            x + 540,
+            y
+        );
+    }
+
+    private void DrawMarketPriceLine(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
+    {
+        int itemNameX = x;
+
+        if (entry.IconItem is not null)
+        {
+            try
+            {
+                entry.IconItem.drawInMenu(
+                    b,
+                    new Vector2(x, y - 12),
+                    0.65f,
+                    1f,
+                    0.9f,
+                    StackDrawType.Hide,
+                    Color.White,
+                    false
+                );
+
+                itemNameX = x + 55;
+            }
+            catch
+            {
+                itemNameX = x;
+            }
+        }
+
+        float scale = this.GetBodyTextScale();
+
+        this.DrawColoredText(b, entry.ItemName, itemNameX, y, Game1.textColor, scale);
+        this.DrawColoredText(
+            b,
+            this.FormatMarketUnitPrice(entry.MarketUnitPrice),
+            x + 295,
+            y,
+            this.GetMarketMultiplierColor(entry.MarketMultiplier),
+            scale
+        );
+        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 430, y, Game1.textColor, scale);
+        this.DrawColoredText(
+            b,
+            this.FormatMultiplier(entry.MarketMultiplier),
+            x + 540,
+            y,
+            Game1.textColor,
+            scale
+        );
+    }
+
+    private string FormatMarketUnitPrice(double price)
+    {
+        if (double.IsNaN(price) || double.IsInfinity(price) || price < 0)
+            return "0g";
+
+        double roundedInteger = Math.Round(price);
+
+        if (Math.Abs(price - roundedInteger) < 0.0001)
+            return $"{(int)roundedInteger}g";
+
+        return $"{price.ToString("0.##", CultureInfo.InvariantCulture)}g";
+    }
+
+    private Color GetMarketMultiplierColor(double multiplier)
+    {
+        const double epsilon = 0.0001;
+
+        if (multiplier > 1.0 + epsilon)
+            return Color.ForestGreen;
+
+        if (multiplier < 1.0 - epsilon)
+            return Color.DarkRed;
+
+        return Game1.textColor;
+    }
+
+    private void DrawColoredText(SpriteBatch b, string text, int x, int y, Color color, float scale)
+    {
+        b.DrawString(
+            Game1.smallFont,
+            text,
+            new Vector2(x, y),
+            color,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            1f
+        );
+    }
+
+    private string FormatMultiplier(double multiplier)
+    {
+        return multiplier.ToString("0.##");
     }
 
     private void DrawTaxReport(SpriteBatch b, int x, int y)

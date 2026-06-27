@@ -129,5 +129,13 @@
   "finance.income_details_this_season": "今季の収入詳細",
   "finance.income_details_this_year": "今年の収入詳細",
   "finance.no_income_recorded": "収入記録はありません。",
-  "income.unclassified_channel": "未分類の収入"
+  "income.unclassified_channel": "未分類の収入",
+  "tab.market_price": "市場価格",
+  "market_price.title": "市場価格",
+  "market_price.multiplier_note": "現在のテスト倍率：x{{multiplier}}",
+  "market_price.header_item": "アイテム",
+  "market_price.header_market_price": "市場価格",
+  "market_price.header_base_price": "基本価格",
+  "market_price.header_multiplier": "倍率",
+  "market_price.no_items": "売却可能なアイテムが見つかりません。"
 }

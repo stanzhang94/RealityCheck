@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RealityCheck.Patches;
 using RealityCheck.Services;
 using StardewModdingAPI;
@@ -48,6 +49,8 @@ public class IncomeEvents
         int totalMarketShippingIncome = 0;
         int totalLedgerShippingIncome = 0;
 
+        Dictionary<string, ShippingItemGroup> shippingGroups = new();
+
         foreach (var item in shippingBin)
         {
             if (item == null)
@@ -57,11 +60,35 @@ public class IncomeEvents
             int unitPrice = item.sellToStorePrice(-1L);
             int vanillaTotalAmount = unitPrice * quantity;
 
-            if (vanillaTotalAmount <= 0)
+            if (quantity <= 0 || vanillaTotalAmount <= 0)
                 continue;
 
+            string key = $"{item.QualifiedItemId}|{item.DisplayName}|{unitPrice}";
+
+            if (!shippingGroups.TryGetValue(key, out ShippingItemGroup? group))
+            {
+                group = new ShippingItemGroup
+                {
+                    SampleItem = item,
+                    ItemName = item.DisplayName,
+                    ItemId = item.QualifiedItemId,
+                    BaseUnitPrice = unitPrice
+                };
+
+                shippingGroups[key] = group;
+            }
+
+            group.Quantity += quantity;
+        }
+
+        foreach (ShippingItemGroup group in shippingGroups.Values)
+        {
+            int quantity = group.Quantity;
+            int unitPrice = group.BaseUnitPrice;
+            int vanillaTotalAmount = unitPrice * quantity;
+
             var marketPrice = this.marketPriceService.GetShippingBinMarketSellPrice(
-                item,
+                group.SampleItem,
                 quantity,
                 unitPrice
             );
@@ -94,10 +121,10 @@ public class IncomeEvents
 
             this.ledgerService.AddIncome(
                 "Shipping Bin",
-                item.DisplayName,
+                group.ItemName,
                 quantity,
                 ledgerAmount,
-                item.QualifiedItemId,
+                group.ItemId,
                 dataOrigin: dataOrigin,
                 transactionId: transactionId
             );
@@ -109,14 +136,14 @@ public class IncomeEvents
             if (applyMarketSettlement)
             {
                 this.monitor.Log(
-                    $"Shipping income recorded at market settlement: {item.DisplayName} x{quantity} = {ledgerAmount}g (vanilla {vanillaTotalAmount}g)",
+                    $"Shipping income recorded at market settlement: {group.ItemName} x{quantity} = {ledgerAmount}g (vanilla {vanillaTotalAmount}g)",
                     LogLevel.Info
                 );
             }
             else
             {
                 this.monitor.Log(
-                    $"Shipping income recorded: {item.DisplayName} x{quantity} = {ledgerAmount}g",
+                    $"Shipping income recorded: {group.ItemName} x{quantity} = {ledgerAmount}g",
                     LogLevel.Info
                 );
             }
@@ -166,5 +193,19 @@ public class IncomeEvents
                 LogLevel.Info
             );
         }
+    }
+
+
+    private sealed class ShippingItemGroup
+    {
+        public Item SampleItem { get; set; } = null!;
+
+        public string ItemName { get; set; } = string.Empty;
+
+        public string ItemId { get; set; } = string.Empty;
+
+        public int BaseUnitPrice { get; set; }
+
+        public int Quantity { get; set; }
     }
 }

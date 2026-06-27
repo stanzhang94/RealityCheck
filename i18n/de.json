@@ -129,5 +129,13 @@
   "finance.income_details_this_season": "Einnahmendetails dieser Saison",
   "finance.income_details_this_year": "Einnahmendetails dieses Jahr",
   "finance.no_income_recorded": "Keine Einnahmen aufgezeichnet.",
-  "income.unclassified_channel": "Nicht klassifizierte Einnahmen"
+  "income.unclassified_channel": "Nicht klassifizierte Einnahmen",
+  "tab.market_price": "Marktpreis",
+  "market_price.title": "Marktpreis",
+  "market_price.multiplier_note": "Aktueller Testmultiplikator: x{{multiplier}}",
+  "market_price.header_item": "Gegenstand",
+  "market_price.header_market_price": "Marktpreis",
+  "market_price.header_base_price": "Basis",
+  "market_price.header_multiplier": "Faktor",
+  "market_price.no_items": "Keine verkaufbaren Gegenstände gefunden."
 }

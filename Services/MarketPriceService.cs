@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
@@ -33,6 +35,108 @@ public class MarketPriceService
     public bool IsShippingBinMarketSettlementEnabled()
     {
         return this.configService.Config.Market.EnableShippingBinMarketSettlement;
+    }
+
+
+    private static readonly HashSet<int> MarketPriceCategoryWhitelist = new()
+    {
+        -2,  // Gem
+        -4,  // Fish
+        -5,  // Egg
+        -6,  // Milk
+        -15, // Metal Resource
+        -16, // Building Resource
+        -26, // Artisan Goods
+        -75, // Vegetable
+        -79, // Fruit
+        -80, // Flower
+        -81  // Forage / Greens
+    };
+
+    public List<MarketPriceTableEntry> GetSellableObjectMarketPriceTable()
+    {
+        List<MarketPriceTableEntry> entries = new();
+
+        if (!Context.IsWorldReady)
+            return entries;
+
+        foreach (var pair in Game1.objectData)
+        {
+            string objectId = pair.Key;
+            var objectData = pair.Value;
+
+            if (string.IsNullOrWhiteSpace(objectId))
+                continue;
+
+            if (!this.ShouldIncludeInMarketPriceTable(objectData.Category, objectData.Name))
+                continue;
+
+            string qualifiedItemId = objectId.StartsWith("(O)", StringComparison.Ordinal)
+                ? objectId
+                : $"(O){objectId}";
+
+            Item item;
+
+            try
+            {
+                item = ItemRegistry.Create(qualifiedItemId);
+            }
+            catch
+            {
+                continue;
+            }
+
+            int baseUnitPrice;
+
+            try
+            {
+                baseUnitPrice = item.sellToStorePrice(-1L);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (baseUnitPrice <= 0)
+                continue;
+
+            double multiplier = this.GetShadowPriceMultiplier();
+            double marketUnitPrice = Math.Max(0.0, baseUnitPrice * multiplier);
+
+            entries.Add(
+                new MarketPriceTableEntry
+                {
+                    ItemId = item.QualifiedItemId,
+                    ItemName = item.DisplayName,
+                    BaseUnitPrice = baseUnitPrice,
+                    MarketMultiplier = multiplier,
+                    MarketUnitPrice = marketUnitPrice,
+                    Difference = marketUnitPrice - baseUnitPrice,
+                    IconItem = item
+                }
+            );
+        }
+
+        return entries
+            .OrderByDescending(e => Math.Abs(e.Difference))
+            .ThenBy(e => e.ItemName)
+            .ToList();
+    }
+
+    private bool ShouldIncludeInMarketPriceTable(int category, string? internalName)
+    {
+        if (!MarketPriceCategoryWhitelist.Contains(category))
+            return false;
+
+        // Slime eggs are technically sellable, but they are special monster/slime-hutch items,
+        // not normal farm-market commodities. Keep them out even if the game categorizes them like eggs.
+        if (!string.IsNullOrWhiteSpace(internalName)
+            && internalName.Contains("Slime Egg", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public MarketPriceResult GetShippingBinMarketSellPrice(

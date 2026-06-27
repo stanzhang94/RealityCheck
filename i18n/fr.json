@@ -129,5 +129,13 @@
   "finance.income_details_this_season": "Détails des revenus cette saison",
   "finance.income_details_this_year": "Détails des revenus cette année",
   "finance.no_income_recorded": "Aucun revenu enregistré.",
-  "income.unclassified_channel": "Revenu non classé"
+  "income.unclassified_channel": "Revenu non classé",
+  "tab.market_price": "Prix marché",
+  "market_price.title": "Prix du marché",
+  "market_price.multiplier_note": "Multiplicateur de test actuel : x{{multiplier}}",
+  "market_price.header_item": "Objet",
+  "market_price.header_market_price": "Prix du marché",
+  "market_price.header_base_price": "Base",
+  "market_price.header_multiplier": "Taux",
+  "market_price.no_items": "Aucun objet vendable trouvé."
 }

@@ -140,12 +140,13 @@ public class ModEntry : Mod
         if (this.configService?.Config.OpenReportKey.JustPressed() != true)
             return;
 
-        if (this.ledgerService is null || this.analyticsService is null)
+        if (this.ledgerService is null || this.analyticsService is null || this.marketPriceService is null)
             return;
 
         Game1.activeClickableMenu = new FinanceMenu(
             this.ledgerService,
-            this.analyticsService
+            this.analyticsService,
+            this.marketPriceService
         );
 
         Game1.playSound("bigSelect");

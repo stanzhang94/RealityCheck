@@ -50,18 +50,20 @@ public static class ShopSalePatch
         string itemId = __args[0] is Item soldItem ? soldItem.QualifiedItemId : "";
 
         int quantity = 1;
-        int amount = 0;
+        int unitPrice = 0;
 
         if (__args.Length >= 2 && __args[1] is int price)
-            amount = price;
+            unitPrice = price;
 
-        if (__args.Length >= 3 && __args[2] is int stack)
+        if (__args.Length >= 3 && __args[2] is int stack && stack > 0)
             quantity = stack;
+
+        int amount = unitPrice * quantity;
 
         if (amount <= 0)
         {
             monitor?.Log(
-                $"Shop sale detected but amount was invalid: {itemName}",
+                $"Shop sale detected but amount was invalid: {itemName}, unitPrice={unitPrice}, quantity={quantity}",
                 LogLevel.Trace
             );
             return;

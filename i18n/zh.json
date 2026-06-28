@@ -138,12 +138,16 @@
   "market_price.header_base_price": "原价",
   "market_price.header_multiplier": "倍率",
   "market_price.no_items": "未找到可出售物品。",
-  "market_price.header_daily_multiplier": "当日倍率",
-  "market_price.header_total_multiplier": "总倍率",
+  "market_price.header_daily_multiplier": "今日浮动",
+  "market_price.header_total_multiplier": "总浮动",
   "market_price.history_back": "返回",
   "market_price.history_title": "{{item}} 价格走势",
   "market_price.history_summary": "当前 {{current}}  最高 {{high}}  最低 {{low}}",
   "market_price.history_no_data": "暂无价格历史。",
   "market_price.history_range": "区间：{{start}} 到 {{end}}",
-  "market_price.history_note": "历史记录保留已发现市场商品最近 28 天。"
+  "market_price.history_note": "历史记录保留已发现市场商品最近 28 天。",
+  "shipping_market_summary.title": "Reality Check 市场结算",
+  "shipping_market_summary.original": "原版显示：{{amount}}g",
+  "shipping_market_summary.market": "市场到账：{{amount}}g",
+  "shipping_market_summary.adjustment": "市场修正：{{amount}}"
 }

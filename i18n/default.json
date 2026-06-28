@@ -138,12 +138,16 @@
   "market_price.header_base_price": "Base",
   "market_price.header_multiplier": "Rate",
   "market_price.no_items": "No sellable items found.",
-  "market_price.header_daily_multiplier": "Daily",
-  "market_price.header_total_multiplier": "Total",
+  "market_price.header_daily_multiplier": "Daily Move",
+  "market_price.header_total_multiplier": "Total Move",
   "market_price.history_back": "Back",
   "market_price.history_title": "{{item}} price history",
   "market_price.history_summary": "Current {{current}}  High {{high}}  Low {{low}}",
   "market_price.history_no_data": "No price history recorded yet.",
   "market_price.history_range": "Range: {{start}} to {{end}}",
-  "market_price.history_note": "History keeps the latest 28 days for discovered market goods."
+  "market_price.history_note": "History keeps the latest 28 days for discovered market goods.",
+  "shipping_market_summary.title": "Reality Check Market Settlement",
+  "shipping_market_summary.original": "Original display: {{amount}}g",
+  "shipping_market_summary.market": "Market payout: {{amount}}g",
+  "shipping_market_summary.adjustment": "Market adjustment: {{amount}}"
 }

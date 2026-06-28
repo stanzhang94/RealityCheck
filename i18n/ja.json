@@ -138,12 +138,16 @@
   "market_price.header_base_price": "基本価格",
   "market_price.header_multiplier": "倍率",
   "market_price.no_items": "売却可能なアイテムが見つかりません。",
-  "market_price.header_daily_multiplier": "当日倍率",
-  "market_price.header_total_multiplier": "総倍率",
+  "market_price.header_daily_multiplier": "今日変動",
+  "market_price.header_total_multiplier": "総変動",
   "market_price.history_back": "戻る",
   "market_price.history_title": "{{item}} 価格履歴",
   "market_price.history_summary": "現在 {{current}}  最高 {{high}}  最低 {{low}}",
   "market_price.history_no_data": "価格履歴はまだありません。",
   "market_price.history_range": "期間：{{start}} から {{end}}",
-  "market_price.history_note": "発見済み市場商品の直近28日を保存します。"
+  "market_price.history_note": "発見済み市場商品の直近28日を保存します。",
+  "shipping_market_summary.title": "Reality Check Market Settlement",
+  "shipping_market_summary.original": "Original display: {{amount}}g",
+  "shipping_market_summary.market": "Market payout: {{amount}}g",
+  "shipping_market_summary.adjustment": "Market adjustment: {{amount}}"
 }

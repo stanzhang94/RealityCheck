@@ -1010,24 +1010,24 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             this.FormatMarketUnitPrice(entry.MarketUnitPrice),
             x + 245,
             y,
-            this.GetMarketMultiplierColor(entry.TotalMultiplier),
+            Game1.textColor,
             scale
         );
         this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 360, y, Game1.textColor, scale);
         this.DrawColoredText(
             b,
-            this.FormatMultiplier(entry.DailyMultiplier),
+            this.FormatMultiplierPercent(entry.DailyMultiplier),
             x + 455,
             y,
-            Game1.textColor,
+            this.GetMarketMultiplierColor(entry.DailyMultiplier),
             scale
         );
         this.DrawColoredText(
             b,
-            this.FormatMultiplier(entry.TotalMultiplier),
+            this.FormatMultiplierPercent(entry.TotalMultiplier),
             x + 580,
             y,
-            Game1.textColor,
+            this.GetMarketMultiplierColor(entry.TotalMultiplier),
             scale
         );
     }
@@ -1095,6 +1095,21 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             SpriteEffects.None,
             1f
         );
+    }
+
+
+    private string FormatMultiplierPercent(double multiplier)
+    {
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier))
+            return "0.0%";
+
+        double percent = (multiplier - 1.0) * 100.0;
+
+        if (Math.Abs(percent) < 0.05)
+            percent = 0.0;
+
+        string sign = percent > 0 ? "+" : string.Empty;
+        return $"{sign}{percent:0.0}%";
     }
 
     private string FormatMultiplier(double multiplier)

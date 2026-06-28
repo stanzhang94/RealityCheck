@@ -16,16 +16,19 @@ public class MarketPriceService
 
     private readonly ConfigService configService;
     private readonly MarketCategoryResolver marketCategoryResolver;
+    private readonly WeatherFactorService weatherFactorService;
     private readonly IMonitor monitor;
 
     public MarketPriceService(
         ConfigService configService,
         MarketCategoryResolver marketCategoryResolver,
+        WeatherFactorService weatherFactorService,
         IMonitor monitor
     )
     {
         this.configService = configService;
         this.marketCategoryResolver = marketCategoryResolver;
+        this.weatherFactorService = weatherFactorService;
         this.monitor = monitor;
     }
 
@@ -112,7 +115,7 @@ public class MarketPriceService
                 ? item.QualifiedItemId
                 : category.MarketCommodityKey;
 
-            double multiplier = this.GetItemDailyFactor(marketCommodityKey);
+            double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey);
             int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
 
             var entry = new MarketPriceTableEntry
@@ -171,7 +174,13 @@ public class MarketPriceService
             if (baseUnitPrice < MarketCategoryResolver.MinimumMarketManagedBaseUnitPrice)
                 continue;
 
-            double multiplier = this.GetItemDailyFactor(entry.MarketCommodityKey);
+            double multiplier = this.GetCurrentMarketMultiplier(
+                this.marketCategoryResolver.Resolve(
+                    this.TryCreateIconItem(entry.ItemId),
+                    baseUnitPrice
+                ),
+                entry.MarketCommodityKey
+            );
             int marketUnitPrice = this.CalculateMarketUnitPrice(
                 baseUnitPrice,
                 multiplier
@@ -279,7 +288,7 @@ public class MarketPriceService
             ? item.QualifiedItemId
             : category.MarketCommodityKey;
 
-        double multiplier = this.GetItemDailyFactor(marketCommodityKey);
+        double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey);
         int marketTotal = this.CalculateMarketTotal(baseTotal, multiplier);
 
         return new MarketPriceResult
@@ -331,8 +340,37 @@ public class MarketPriceService
 
         return this.CalculateMarketUnitPrice(
             safeBaseUnitPrice,
-            this.GetItemDailyFactor(marketCommodityKey)
+            this.GetCurrentMarketMultiplier(category, marketCommodityKey)
         );
+    }
+
+    public double GetCurrentMarketMultiplier(
+        MarketCategoryResult category,
+        string marketCommodityKey
+    )
+    {
+        double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
+        double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
+
+        return CombineFactorDeltas(
+            itemDailyFactor,
+            weatherFactor
+        );
+    }
+
+    private static double CombineFactorDeltas(params double[] factors)
+    {
+        double total = 1.0;
+
+        foreach (double factor in factors)
+        {
+            if (double.IsNaN(factor) || double.IsInfinity(factor))
+                continue;
+
+            total += Math.Max(0.0, factor) - 1.0;
+        }
+
+        return Math.Max(0.0, total);
     }
 
     public int CalculateMarketUnitPrice(

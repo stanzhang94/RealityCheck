@@ -18,6 +18,7 @@ public class ModEntry : Mod
     private HealthInsuranceNoticeService? healthInsuranceNoticeService;
     private ConfigService? configService;
     private MarketPriceService? marketPriceService;
+    private WeatherFactorService? weatherFactorService;
     private ArtisanIdentityService? artisanIdentityService;
     private MarketCategoryResolver? marketCategoryResolver;
     private TaxEvents taxEvents = null!;
@@ -51,9 +52,12 @@ public class ModEntry : Mod
             this.artisanIdentityService
         );
 
+        this.weatherFactorService = new WeatherFactorService();
+
         this.marketPriceService = new MarketPriceService(
             this.configService,
             this.marketCategoryResolver,
+            this.weatherFactorService,
             this.Monitor
         );
 

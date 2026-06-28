@@ -130,9 +130,19 @@ public class MarketPriceService
                 item
             );
 
-            int marketUnitPrice = this.CalculateMarketUnitPrice(
+            int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+                marketCommodityKey,
                 baseUnitPrice,
-                factors.TotalMultiplier
+                factors.DailyMultiplier
+            );
+
+            double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
+                marketCommodityKey,
+                marketUnitPrice
+            );
+            double displayTotalMultiplier = GetDisplayTotalMultiplier(
+                baseUnitPrice,
+                marketUnitPrice
             );
 
             this.RecordMarketPriceHistory(
@@ -141,7 +151,8 @@ public class MarketPriceService
                 item.DisplayName,
                 baseUnitPrice,
                 marketUnitPrice,
-                factors
+                displayDailyMultiplier,
+                displayTotalMultiplier
             );
 
             var entry = new MarketPriceTableEntry
@@ -151,9 +162,9 @@ public class MarketPriceService
                 ParentItemId = category.ParentItemId,
                 ItemName = item.DisplayName,
                 BaseUnitPrice = baseUnitPrice,
-                DailyMultiplier = factors.DailyMultiplier,
-                TotalMultiplier = factors.TotalMultiplier,
-                MarketMultiplier = factors.TotalMultiplier,
+                DailyMultiplier = displayDailyMultiplier,
+                TotalMultiplier = displayTotalMultiplier,
+                MarketMultiplier = displayTotalMultiplier,
                 MarketUnitPrice = marketUnitPrice,
                 Difference = marketUnitPrice - baseUnitPrice,
                 IconItem = item
@@ -220,9 +231,19 @@ public class MarketPriceService
                 iconItem
             );
 
-            int marketUnitPrice = this.CalculateMarketUnitPrice(
+            int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+                entry.MarketCommodityKey,
                 baseUnitPrice,
-                factors.TotalMultiplier
+                factors.DailyMultiplier
+            );
+
+            double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
+                entry.MarketCommodityKey,
+                marketUnitPrice
+            );
+            double displayTotalMultiplier = GetDisplayTotalMultiplier(
+                baseUnitPrice,
+                marketUnitPrice
             );
 
             this.RecordMarketPriceHistory(
@@ -231,7 +252,8 @@ public class MarketPriceService
                 entry.ItemName,
                 baseUnitPrice,
                 marketUnitPrice,
-                factors
+                displayDailyMultiplier,
+                displayTotalMultiplier
             );
 
             entries.Add(
@@ -243,9 +265,9 @@ public class MarketPriceService
                     IsDiscoveredArtisan = true,
                     ItemName = entry.ItemName,
                     BaseUnitPrice = baseUnitPrice,
-                    DailyMultiplier = factors.DailyMultiplier,
-                    TotalMultiplier = factors.TotalMultiplier,
-                    MarketMultiplier = factors.TotalMultiplier,
+                    DailyMultiplier = displayDailyMultiplier,
+                    TotalMultiplier = displayTotalMultiplier,
+                    MarketMultiplier = displayTotalMultiplier,
                     MarketUnitPrice = marketUnitPrice,
                     Difference = marketUnitPrice - baseUnitPrice,
                     IconItem = iconItem
@@ -289,6 +311,16 @@ public class MarketPriceService
         {
             return null;
         }
+    }
+
+    public void UpdateAllMarketPricesForToday(
+        IEnumerable<LedgerEntry>? ledgerEntries = null
+    )
+    {
+        if (!Context.IsWorldReady)
+            return;
+
+        _ = this.GetSellableObjectMarketPriceTable(ledgerEntries);
     }
 
     public bool ShouldApplyMarketPricing(
@@ -344,10 +376,21 @@ public class MarketPriceService
             item
         );
 
-        int marketTotal = this.CalculateMarketTotal(baseTotal, factors.TotalMultiplier);
-        int marketUnitPrice = safeQuantity > 0
-            ? Math.Max(0, (int)Math.Round((double)marketTotal / safeQuantity, MidpointRounding.AwayFromZero))
-            : 0;
+        int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+            marketCommodityKey,
+            safeBaseUnitPrice,
+            factors.DailyMultiplier
+        );
+        int marketTotal = marketUnitPrice * safeQuantity;
+
+        double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
+            marketCommodityKey,
+            marketUnitPrice
+        );
+        double displayTotalMultiplier = GetDisplayTotalMultiplier(
+            safeBaseUnitPrice,
+            marketUnitPrice
+        );
 
         this.RecordMarketPriceHistory(
             marketCommodityKey,
@@ -355,7 +398,8 @@ public class MarketPriceService
             item.DisplayName,
             safeBaseUnitPrice,
             marketUnitPrice,
-            factors
+            displayDailyMultiplier,
+            displayTotalMultiplier
         );
 
         return new MarketPriceResult
@@ -365,9 +409,9 @@ public class MarketPriceService
             Quantity = safeQuantity,
             BaseUnitPrice = safeBaseUnitPrice,
             BaseTotal = baseTotal,
-            MarketMultiplier = factors.TotalMultiplier,
-            DailyMultiplier = factors.DailyMultiplier,
-            TotalMultiplier = factors.TotalMultiplier,
+            MarketMultiplier = displayTotalMultiplier,
+            DailyMultiplier = displayDailyMultiplier,
+            TotalMultiplier = displayTotalMultiplier,
             MarketTotal = marketTotal,
             MarketUnitPrice = safeQuantity > 0
                 ? (double)marketTotal / safeQuantity
@@ -413,9 +457,19 @@ public class MarketPriceService
             item
         );
 
-        int marketUnitPrice = this.CalculateMarketUnitPrice(
+        int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+            marketCommodityKey,
             safeBaseUnitPrice,
-            factors.TotalMultiplier
+            factors.DailyMultiplier
+        );
+
+        double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
+            marketCommodityKey,
+            marketUnitPrice
+        );
+        double displayTotalMultiplier = GetDisplayTotalMultiplier(
+            safeBaseUnitPrice,
+            marketUnitPrice
         );
 
         this.RecordMarketPriceHistory(
@@ -424,23 +478,11 @@ public class MarketPriceService
             item.DisplayName,
             safeBaseUnitPrice,
             marketUnitPrice,
-            factors
+            displayDailyMultiplier,
+            displayTotalMultiplier
         );
 
         return marketUnitPrice;
-    }
-
-    public double GetCurrentMarketMultiplier(
-        MarketCategoryResult category,
-        string marketCommodityKey,
-        Item? item = null
-    )
-    {
-        return this.GetCurrentMarketFactorBreakdown(
-            category,
-            marketCommodityKey,
-            item
-        ).TotalMultiplier;
     }
 
     public MarketPriceFactorBreakdown GetCurrentMarketFactorBreakdown(
@@ -464,9 +506,9 @@ public class MarketPriceService
                     artisanTransmission.DailyMultiplier
                 ),
                 TotalMultiplier = CombineFactorDeltas(
-                    trend.LongTermFactor,
+                    trend.TodayTrendChange,
                     itemDailyFactor,
-                    artisanTransmission.TotalMultiplier
+                    artisanTransmission.DailyMultiplier
                 )
             };
         }
@@ -489,7 +531,7 @@ public class MarketPriceService
                 offSeasonFactor
             ),
             TotalMultiplier = CombineFactorDeltas(
-                trend.LongTermFactor,
+                trend.TodayTrendChange,
                 itemDailyFactor,
                 weatherFactor,
                 festivalFactor,
@@ -576,7 +618,7 @@ public class MarketPriceService
                 offSeasonFactor
             ),
             TotalMultiplier = CombineFactorDeltas(
-                trend.LongTermFactor,
+                trend.TodayTrendChange,
                 itemDailyFactor,
                 weatherFactor,
                 festivalFactor,
@@ -591,7 +633,8 @@ public class MarketPriceService
         string itemName,
         int baseUnitPrice,
         int marketUnitPrice,
-        MarketPriceFactorBreakdown factors
+        double displayDailyMultiplier,
+        double displayTotalMultiplier
     )
     {
         this.marketTrendService.RecordPrice(
@@ -600,9 +643,63 @@ public class MarketPriceService
             itemName,
             baseUnitPrice,
             marketUnitPrice,
-            factors.DailyMultiplier,
-            factors.TotalMultiplier
+            displayDailyMultiplier,
+            displayTotalMultiplier
         );
+    }
+
+
+    // Step 16.6 formula model:
+    // Today market price = yesterday market price * today multiplier.
+    // Today multiplier = 1 + trend offset today + item daily offset + weather offset + festival offset + off-season offset + artisan transmission offset.
+    // Base price is only used when there is no previous market price, and for total multiplier display / boundary checks.
+    private int CalculateRecursiveMarketUnitPrice(
+        string marketCommodityKey,
+        int baseUnitPrice,
+        double dailyMultiplier
+    )
+    {
+        int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
+
+        if (safeBaseUnitPrice <= 0)
+            return 0;
+
+        int previousMarketUnitPrice = this.marketTrendService.GetPreviousMarketUnitPrice(
+            marketCommodityKey,
+            safeBaseUnitPrice
+        );
+
+        double safeDailyMultiplier = Math.Max(0.0, dailyMultiplier);
+
+        return Math.Max(
+            0,
+            (int)Math.Round(
+                previousMarketUnitPrice * safeDailyMultiplier,
+                MidpointRounding.AwayFromZero
+            )
+        );
+    }
+
+    private double GetDisplayDailyMultiplier(
+        string marketCommodityKey,
+        int currentMarketUnitPrice
+    )
+    {
+        return this.marketTrendService.GetDayOverDayMultiplier(
+            marketCommodityKey,
+            currentMarketUnitPrice
+        );
+    }
+
+    private static double GetDisplayTotalMultiplier(
+        int baseUnitPrice,
+        int marketUnitPrice
+    )
+    {
+        if (baseUnitPrice <= 0)
+            return 1.0;
+
+        return Math.Max(0.0, (double)Math.Max(0, marketUnitPrice) / baseUnitPrice);
     }
 
     private static double CombineFactorDeltas(params double[] factors)

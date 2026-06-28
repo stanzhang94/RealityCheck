@@ -13,6 +13,7 @@ public class MarketTrendService
 {
     private const string SaveDataKey = "market-trend-state";
     private const int MaxHistoryDays = 28;
+    private const string CurrentPricingModelVersion = "16.7-recursive-daily-v1";
 
     private const double SoftLowFinalFactor = 0.50;
     private const double SoftHighFinalFactor = 2.00;
@@ -45,6 +46,7 @@ public class MarketTrendService
             ?? new MarketTrendSaveData();
 
         this.EnsureCollections();
+        this.MigratePricingModelIfNeeded();
         this.loadedSaveId = this.GetCurrentSaveId();
     }
 
@@ -75,7 +77,10 @@ public class MarketTrendService
 
         return new MarketTrendSnapshot
         {
-            LongTermFactor = SanitizeFactor(state.LongTermFactor),
+            // Step 16.6: this service contributes today's trend factor only.
+            // MarketPriceService applies it to yesterday's saved market price.
+            // The old LongTermFactor save field is kept neutral for compatibility.
+            LongTermFactor = 1.0,
             TodayTrendChange = SanitizeFactor(state.TodayTrendChange),
             TrendMode = state.TrendMode,
             DaysRemaining = state.DaysRemaining
@@ -146,6 +151,60 @@ public class MarketTrendService
         return history
             .OrderBy(p => p.DateIndex)
             .ToList();
+    }
+
+
+    public int GetPreviousMarketUnitPrice(
+        string marketCommodityKey,
+        int fallbackBaseUnitPrice
+    )
+    {
+        int safeFallback = Math.Max(0, fallbackBaseUnitPrice);
+
+        if (string.IsNullOrWhiteSpace(marketCommodityKey) || safeFallback <= 0)
+            return safeFallback;
+
+        this.EnsureLoadedForCurrentSave();
+
+        if (!this.data.PriceHistory.TryGetValue(marketCommodityKey, out List<MarketPriceHistoryPoint>? history))
+            return safeFallback;
+
+        int currentDateIndex = GetCurrentDateIndex();
+
+        MarketPriceHistoryPoint? previous = history
+            .Where(p => p.DateIndex < currentDateIndex && p.MarketUnitPrice > 0)
+            .OrderByDescending(p => p.DateIndex)
+            .FirstOrDefault();
+
+        return previous?.MarketUnitPrice > 0
+            ? previous.MarketUnitPrice
+            : safeFallback;
+    }
+
+    public double GetDayOverDayMultiplier(
+        string marketCommodityKey,
+        int currentMarketUnitPrice
+    )
+    {
+        if (string.IsNullOrWhiteSpace(marketCommodityKey) || currentMarketUnitPrice <= 0)
+            return 1.0;
+
+        this.EnsureLoadedForCurrentSave();
+
+        if (!this.data.PriceHistory.TryGetValue(marketCommodityKey, out List<MarketPriceHistoryPoint>? history))
+            return 1.0;
+
+        int currentDateIndex = GetCurrentDateIndex();
+
+        MarketPriceHistoryPoint? previous = history
+            .Where(p => p.DateIndex < currentDateIndex && p.MarketUnitPrice > 0)
+            .OrderByDescending(p => p.DateIndex)
+            .FirstOrDefault();
+
+        if (previous is null || previous.MarketUnitPrice <= 0)
+            return 1.0;
+
+        return SanitizeFactor((double)currentMarketUnitPrice / previous.MarketUnitPrice);
     }
 
     private MarketTrendItemState GetOrCreateState(string marketCommodityKey)
@@ -242,7 +301,12 @@ public class MarketTrendService
         );
 
         state.TodayTrendChange = todayTrendChange;
-        state.LongTermFactor = SanitizeFactor(state.LongTermFactor * todayTrendChange);
+
+        // Step 16.6: the trend state now contributes only today's trend factor.
+        // The actual price history is carried by previous market price, not by base-price anchoring.
+        // Keep the old save field neutral for compatibility with existing saves.
+        state.LongTermFactor = 1.0;
+
         state.DaysRemaining = Math.Max(0, state.DaysRemaining - 1);
     }
 
@@ -300,11 +364,9 @@ public class MarketTrendService
             random,
             new Dictionary<MarketTrendMode, double>
             {
-                [MarketTrendMode.StrongUp] = 0.10,
                 [MarketTrendMode.Up] = 0.25,
                 [MarketTrendMode.Flat] = 0.30,
-                [MarketTrendMode.Down] = 0.25,
-                [MarketTrendMode.StrongDown] = 0.10
+                [MarketTrendMode.Down] = 0.25
             }
         );
     }
@@ -358,11 +420,11 @@ public class MarketTrendService
 
         double delta = mode switch
         {
-            MarketTrendMode.StrongUp => NextDouble(random, 0.05, 0.09),
+            MarketTrendMode.StrongUp => NextDouble(random, 0.10, 0.20),
             MarketTrendMode.Up => NextDouble(random, 0.02, 0.05),
             MarketTrendMode.Flat => NextDouble(random, -0.015, 0.015),
             MarketTrendMode.Down => -NextDouble(random, 0.02, 0.06),
-            MarketTrendMode.StrongDown => -NextDouble(random, 0.05, 0.09),
+            MarketTrendMode.StrongDown => -NextDouble(random, 0.10, 0.20),
             _ => 0.0
         };
 
@@ -380,6 +442,26 @@ public class MarketTrendService
         ulong hash = ComputeStableHash(seed);
 
         return unchecked((int)(hash & 0x7FFFFFFF));
+    }
+
+
+    private void MigratePricingModelIfNeeded()
+    {
+        this.EnsureCollections();
+
+        if (string.Equals(this.data.PricingModelVersion, CurrentPricingModelVersion, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // Step 16.7: old market history was generated by pre-recursive models.
+        // It cannot be used as yesterday's price for the new formula.
+        this.data.PriceHistory.Clear();
+        this.data.TrendStates.Clear();
+        this.data.PricingModelVersion = CurrentPricingModelVersion;
+
+        this.monitor.Log(
+            $"Market trend state migrated to {CurrentPricingModelVersion}; old market price history was cleared.",
+            LogLevel.Info
+        );
     }
 
     private void EnsureLoadedForCurrentSave()
@@ -405,6 +487,7 @@ public class MarketTrendService
 
     private void EnsureCollections()
     {
+        this.data.PricingModelVersion ??= string.Empty;
         this.data.TrendStates ??= new Dictionary<string, MarketTrendItemState>();
         this.data.PriceHistory ??= new Dictionary<string, List<MarketPriceHistoryPoint>>();
     }

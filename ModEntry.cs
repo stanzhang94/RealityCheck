@@ -146,6 +146,7 @@ public class ModEntry : Mod
         helper.Events.Content.AssetRequested += this.healthInsuranceNoticeService.OnAssetRequested;
 
         helper.Events.GameLoop.DayStarted += this.OnShippingTraceDayStarted;
+        helper.Events.GameLoop.DayStarted += this.OnMarketPriceDayStarted;
         helper.Events.GameLoop.DayStarted += this.taxEvents.OnDayStarted;
 
         helper.Events.Display.MenuChanged += this.taxNoticeMailRouter.OnMenuChanged;
@@ -161,6 +162,7 @@ public class ModEntry : Mod
     {
         this.ledgerService?.Load();
         this.marketTrendService?.Load();
+        this.marketPriceService?.UpdateAllMarketPricesForToday(this.ledgerService?.GetEntries());
     }
 
     private void OnSaving(object? sender, SavingEventArgs e)
@@ -190,6 +192,12 @@ public class ModEntry : Mod
         );
 
         Game1.playSound("bigSelect");
+    }
+
+
+    private void OnMarketPriceDayStarted(object? sender, DayStartedEventArgs e)
+    {
+        this.marketPriceService?.UpdateAllMarketPricesForToday(this.ledgerService?.GetEntries());
     }
 
     private void OnShippingTraceDayStarted(object? sender, DayStartedEventArgs e)

@@ -515,10 +515,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         int menuX = Game1.uiViewport.Width / 2 - 400;
         int menuY = Game1.uiViewport.Height / 2 - 300;
         int contentX = menuX + 70;
-        int firstRowY = menuY + 180 - this.scrollOffset + 130;
-
-        if (x < contentX || x > contentX + 690)
-            return false;
+        int firstRowY = menuY + 180 - this.scrollOffset + 85;
 
         int relativeY = y - firstRowY;
 
@@ -536,7 +533,14 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         if (rowIndex < 0 || rowIndex >= entries.Count)
             return false;
 
-        this.selectedMarketPriceEntry = entries[rowIndex];
+        MarketPriceTableEntry entry = entries[rowIndex];
+        int rowLeft = entry.IconItem is not null ? contentX + 44 : contentX;
+        int rowRight = contentX + 690;
+
+        if (x < rowLeft || x > rowRight)
+            return false;
+
+        this.selectedMarketPriceEntry = entry;
         this.scrollOffset = 0;
 
         return true;
@@ -627,22 +631,6 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         }
 
         this.DrawLine(b, I18n.Get("market_price.title"), x, y);
-        y += 45;
-
-        this.DrawLine(
-            b,
-            I18n.Get(
-                "market_price.multiplier_note",
-                new
-                {
-                    min = this.marketPriceService.GetItemDailyFactorMinimumLabel(),
-                    max = this.marketPriceService.GetItemDailyFactorMaximumLabel()
-                }
-            ),
-            x,
-            y
-        );
-
         y += 45;
 
         this.DrawMarketPriceHeader(b, x, y);
@@ -942,30 +930,30 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawMarketPriceHeader(SpriteBatch b, int x, int y)
     {
-        this.marketPriceItemHeaderBounds = new Rectangle(x + 55, y - 5, 200, 35);
-        this.marketPriceMarketHeaderBounds = new Rectangle(x + 260, y - 5, 100, 35);
-        this.marketPriceBaseHeaderBounds = new Rectangle(x + 365, y - 5, 85, 35);
+        this.marketPriceItemHeaderBounds = new Rectangle(x + 50, y - 5, 190, 35);
+        this.marketPriceMarketHeaderBounds = new Rectangle(x + 245, y - 5, 115, 35);
+        this.marketPriceBaseHeaderBounds = new Rectangle(x + 360, y - 5, 80, 35);
         this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(x + 455, y - 5, 120, 35);
         this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(x + 580, y - 5, 120, 35);
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_item") + this.GetMarketPriceSortLabel(MarketPriceSortMode.ItemName),
-            x + 55,
+            x + 50,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_market_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.MarketPrice),
-            x + 260,
+            x + 245,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_base_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.BasePrice),
-            x + 365,
+            x + 360,
             y
         );
 
@@ -987,6 +975,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
     private void DrawMarketPriceLine(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
     {
         int itemNameX = x;
+        int iconX = x - 20;
 
         if (entry.IconItem is not null)
         {
@@ -994,7 +983,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             {
                 entry.IconItem.drawInMenu(
                     b,
-                    new Vector2(x, y - 12),
+                    new Vector2(iconX, y - 12),
                     0.65f,
                     1f,
                     0.9f,
@@ -1003,7 +992,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
                     false
                 );
 
-                itemNameX = x + 55;
+                itemNameX = x + 50;
             }
             catch
             {
@@ -1011,18 +1000,20 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             }
         }
 
+        this.DrawMarketPriceRowTextBackground(b, itemNameX, x + 690, y);
+
         float scale = this.GetBodyTextScale();
 
         this.DrawColoredText(b, entry.ItemName, itemNameX, y, Game1.textColor, scale);
         this.DrawColoredText(
             b,
             this.FormatMarketUnitPrice(entry.MarketUnitPrice),
-            x + 260,
+            x + 245,
             y,
             this.GetMarketMultiplierColor(entry.TotalMultiplier),
             scale
         );
-        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 365, y, Game1.textColor, scale);
+        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 360, y, Game1.textColor, scale);
         this.DrawColoredText(
             b,
             this.FormatMultiplier(entry.DailyMultiplier),
@@ -1039,6 +1030,27 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             Game1.textColor,
             scale
         );
+    }
+
+
+    private void DrawMarketPriceRowTextBackground(SpriteBatch b, int left, int right, int y)
+    {
+        Rectangle bounds = new Rectangle(
+            left - 8,
+            y - 5,
+            Math.Max(0, right - left + 8),
+            36
+        );
+
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return;
+
+        Point mousePoint = new Point(Game1.getMouseX(), Game1.getMouseY());
+        Color backgroundColor = bounds.Contains(mousePoint)
+            ? Color.White * 0.32f
+            : Color.White * 0.16f;
+
+        b.Draw(Game1.staminaRect, bounds, backgroundColor);
     }
 
     private string FormatMarketUnitPrice(double price)

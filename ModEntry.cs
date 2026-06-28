@@ -21,6 +21,7 @@ public class ModEntry : Mod
     private WeatherFactorService? weatherFactorService;
     private FestivalFactorService? festivalFactorService;
     private OffSeasonFactorService? offSeasonFactorService;
+    private MarketTrendService? marketTrendService;
     private ArtisanIdentityService? artisanIdentityService;
     private MarketCategoryResolver? marketCategoryResolver;
     private TaxEvents taxEvents = null!;
@@ -58,12 +59,20 @@ public class ModEntry : Mod
         this.festivalFactorService = new FestivalFactorService();
         this.offSeasonFactorService = new OffSeasonFactorService();
 
+        this.marketTrendService = new MarketTrendService(
+            helper,
+            this.Monitor
+        );
+
+        this.marketTrendService.Load();
+
         this.marketPriceService = new MarketPriceService(
             this.configService,
             this.marketCategoryResolver,
             this.weatherFactorService,
             this.festivalFactorService,
             this.offSeasonFactorService,
+            this.marketTrendService,
             this.Monitor
         );
 
@@ -151,11 +160,13 @@ public class ModEntry : Mod
     private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
     {
         this.ledgerService?.Load();
+        this.marketTrendService?.Load();
     }
 
     private void OnSaving(object? sender, SavingEventArgs e)
     {
         this.ledgerService?.Save();
+        this.marketTrendService?.Save();
     }
 
     private void OnButtonsChanged(object? sender, ButtonsChangedEventArgs e)

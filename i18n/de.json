@@ -132,10 +132,18 @@
   "income.unclassified_channel": "Nicht klassifizierte Einnahmen",
   "tab.market_price": "Marktpreis",
   "market_price.title": "Marktpreis",
-  "market_price.multiplier_note": "Item daily factor: {{min}} to {{max}}; weather, festival, off-season, and artisan transmission factors included",
+  "market_price.multiplier_note": "Enthält Langzeittrend, Wetter, Feste, Nebensaison und Verarbeitungseffekt",
   "market_price.header_item": "Gegenstand",
   "market_price.header_market_price": "Marktpreis",
   "market_price.header_base_price": "Basis",
   "market_price.header_multiplier": "Faktor",
-  "market_price.no_items": "Keine verkaufbaren Gegenstände gefunden."
+  "market_price.no_items": "Keine verkaufbaren Gegenstände gefunden.",
+  "market_price.header_daily_multiplier": "Tag-Faktor",
+  "market_price.header_total_multiplier": "Gesamt",
+  "market_price.history_back": "Zurück",
+  "market_price.history_title": "Preisverlauf: {{item}}",
+  "market_price.history_summary": "Aktuell {{current}}  Hoch {{high}}  Tief {{low}}",
+  "market_price.history_no_data": "Noch kein Preisverlauf vorhanden.",
+  "market_price.history_range": "Zeitraum: {{start}} bis {{end}}",
+  "market_price.history_note": "Der Verlauf speichert die letzten 28 Tage entdeckter Marktgüter."
 }

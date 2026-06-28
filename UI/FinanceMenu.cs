@@ -29,6 +29,10 @@ public class FinanceMenu : IClickableMenu
 
     private List<MarketPriceTableEntry>? marketPriceEntries;
 
+    private MarketPriceTableEntry? selectedMarketPriceEntry;
+
+    private Rectangle marketPriceBackBounds;
+
     private MarketPriceSortMode marketPriceSortMode = MarketPriceSortMode.MarketPrice;
 
     private bool marketPriceSortDescending = true;
@@ -39,7 +43,9 @@ public class FinanceMenu : IClickableMenu
 
     private Rectangle marketPriceBaseHeaderBounds;
 
-    private Rectangle marketPriceMultiplierHeaderBounds;
+    private Rectangle marketPriceDailyMultiplierHeaderBounds;
+
+    private Rectangle marketPriceTotalMultiplierHeaderBounds;
 
     private Rectangle previousScissorRectangle;
 
@@ -65,7 +71,8 @@ public class FinanceMenu : IClickableMenu
         ItemName,
         MarketPrice,
         BasePrice,
-        Multiplier
+        DailyMultiplier,
+        TotalMultiplier
     }
 
     public FinanceMenu(
@@ -93,45 +100,72 @@ public class FinanceMenu : IClickableMenu
     {
         base.receiveLeftClick(x, y, playSound);
 
-        if (this.currentTab == ReportTab.Market && this.TryHandleMarketPriceHeaderClick(x, y))
-        {
-            if (playSound)
-                Game1.playSound("smallSelect");
-
+        if (this.TryHandleReportTabClick(x, y, playSound))
             return;
+
+        if (this.currentTab == ReportTab.Market)
+        {
+            if (this.selectedMarketPriceEntry is not null)
+            {
+                if (this.marketPriceBackBounds.Contains(x, y))
+                {
+                    this.selectedMarketPriceEntry = null;
+                    this.scrollOffset = 0;
+
+                    if (playSound)
+                        Game1.playSound("smallSelect");
+                }
+
+                return;
+            }
+
+            if (this.TryHandleMarketPriceHeaderClick(x, y))
+            {
+                if (playSound)
+                    Game1.playSound("smallSelect");
+
+                return;
+            }
+
+            if (this.TryHandleMarketPriceRowClick(x, y))
+            {
+                if (playSound)
+                    Game1.playSound("smallSelect");
+
+                return;
+            }
         }
+    }
+
+    private bool TryHandleReportTabClick(int x, int y, bool playSound)
+    {
+        ReportTab? targetTab = null;
 
         if (this.dailyTab.Contains(x, y))
-        {
-            this.currentTab = ReportTab.Daily;
-            this.scrollOffset = 0;
-            Game1.playSound("smallSelect");
-        }
+            targetTab = ReportTab.Daily;
         else if (this.seasonalTab.Contains(x, y))
-        {
-            this.currentTab = ReportTab.Seasonal;
-            this.scrollOffset = 0;
-            Game1.playSound("smallSelect");
-        }
+            targetTab = ReportTab.Seasonal;
         else if (this.annualTab.Contains(x, y))
-        {
-            this.currentTab = ReportTab.Annual;
-            this.scrollOffset = 0;
-            Game1.playSound("smallSelect");
-        }
+            targetTab = ReportTab.Annual;
         else if (this.taxTab.Contains(x, y))
-        {
-            this.currentTab = ReportTab.Tax;
-            this.scrollOffset = 0;
-            Game1.playSound("smallSelect");
-        }
+            targetTab = ReportTab.Tax;
         else if (this.marketTab.Contains(x, y))
-        {
-            this.currentTab = ReportTab.Market;
-            this.scrollOffset = 0;
+            targetTab = ReportTab.Market;
+
+        if (targetTab is null)
+            return false;
+
+        this.currentTab = targetTab.Value;
+        this.scrollOffset = 0;
+        this.selectedMarketPriceEntry = null;
+
+        if (targetTab.Value == ReportTab.Market)
             this.marketPriceEntries = null;
+
+        if (playSound)
             Game1.playSound("smallSelect");
-        }
+
+        return true;
     }
 
     public override void receiveScrollWheelAction(int direction)
@@ -473,6 +507,41 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.UpdateContentHeight(y + 150);
     }
 
+    private bool TryHandleMarketPriceRowClick(int x, int y)
+    {
+        if (y < this.contentTop || y > this.contentBottom)
+            return false;
+
+        int menuX = Game1.uiViewport.Width / 2 - 400;
+        int menuY = Game1.uiViewport.Height / 2 - 300;
+        int contentX = menuX + 70;
+        int firstRowY = menuY + 180 - this.scrollOffset + 130;
+
+        if (x < contentX || x > contentX + 690)
+            return false;
+
+        int relativeY = y - firstRowY;
+
+        if (relativeY < 0)
+            return false;
+
+        int rowIndex = relativeY / 42;
+        int rowOffset = relativeY % 42;
+
+        if (rowOffset > 34)
+            return false;
+
+        List<MarketPriceTableEntry> entries = this.GetSortedMarketPriceEntries();
+
+        if (rowIndex < 0 || rowIndex >= entries.Count)
+            return false;
+
+        this.selectedMarketPriceEntry = entries[rowIndex];
+        this.scrollOffset = 0;
+
+        return true;
+    }
+
     private bool TryHandleMarketPriceHeaderClick(int x, int y)
     {
         if (this.marketPriceItemHeaderBounds.Contains(x, y))
@@ -484,8 +553,11 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         if (this.marketPriceBaseHeaderBounds.Contains(x, y))
             return this.SetMarketPriceSort(MarketPriceSortMode.BasePrice);
 
-        if (this.marketPriceMultiplierHeaderBounds.Contains(x, y))
-            return this.SetMarketPriceSort(MarketPriceSortMode.Multiplier);
+        if (this.marketPriceDailyMultiplierHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.DailyMultiplier);
+
+        if (this.marketPriceTotalMultiplierHeaderBounds.Contains(x, y))
+            return this.SetMarketPriceSort(MarketPriceSortMode.TotalMultiplier);
 
         return false;
     }
@@ -517,7 +589,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         {
             MarketPriceSortMode.ItemName => this.marketPriceEntries.OrderBy(e => e.ItemName, StringComparer.CurrentCulture),
             MarketPriceSortMode.BasePrice => this.marketPriceEntries.OrderBy(e => e.BaseUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
-            MarketPriceSortMode.Multiplier => this.marketPriceEntries.OrderBy(e => e.MarketMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+            MarketPriceSortMode.DailyMultiplier => this.marketPriceEntries.OrderBy(e => e.DailyMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+            MarketPriceSortMode.TotalMultiplier => this.marketPriceEntries.OrderBy(e => e.TotalMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
             _ => this.marketPriceEntries.OrderBy(e => e.MarketUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture)
         };
 
@@ -526,7 +599,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             {
                 MarketPriceSortMode.ItemName => this.marketPriceEntries.OrderByDescending(e => e.ItemName, StringComparer.CurrentCulture),
                 MarketPriceSortMode.BasePrice => this.marketPriceEntries.OrderByDescending(e => e.BaseUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
-                MarketPriceSortMode.Multiplier => this.marketPriceEntries.OrderByDescending(e => e.MarketMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+                MarketPriceSortMode.DailyMultiplier => this.marketPriceEntries.OrderByDescending(e => e.DailyMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
+                MarketPriceSortMode.TotalMultiplier => this.marketPriceEntries.OrderByDescending(e => e.TotalMultiplier).ThenBy(e => e.ItemName, StringComparer.CurrentCulture),
                 _ => this.marketPriceEntries.OrderByDescending(e => e.MarketUnitPrice).ThenBy(e => e.ItemName, StringComparer.CurrentCulture)
             };
 
@@ -546,6 +620,12 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawMarketPriceReport(SpriteBatch b, int x, int y)
     {
+        if (this.selectedMarketPriceEntry is not null)
+        {
+            this.DrawMarketPriceHistoryReport(b, this.selectedMarketPriceEntry, x, y);
+            return;
+        }
+
         this.DrawLine(b, I18n.Get("market_price.title"), x, y);
         y += 45;
 
@@ -587,12 +667,286 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.UpdateContentHeight(y + 80);
     }
 
+    private void DrawMarketPriceHistoryReport(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
+    {
+        this.marketPriceBackBounds = new Rectangle(x, y - 8, 125, 42);
+
+        IClickableMenu.drawTextureBox(
+            b,
+            this.marketPriceBackBounds.X,
+            this.marketPriceBackBounds.Y,
+            this.marketPriceBackBounds.Width,
+            this.marketPriceBackBounds.Height,
+            Color.White
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("market_price.history_back"),
+            Game1.smallFont,
+            new Vector2(x + 34, y + 2),
+            Game1.textColor
+        );
+
+        y += 50;
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.history_title", new { item = entry.ItemName }),
+            x,
+            y
+        );
+
+        y += 55;
+
+        IReadOnlyList<MarketPriceHistoryPoint> history = this.marketPriceService.GetMarketPriceHistory(entry.MarketCommodityKey);
+
+        int currentPrice = Math.Max(0, (int)Math.Round(entry.MarketUnitPrice, MidpointRounding.AwayFromZero));
+        int highPrice = history.Count > 0 ? history.Max(p => p.MarketUnitPrice) : currentPrice;
+        int lowPrice = history.Count > 0 ? history.Min(p => p.MarketUnitPrice) : currentPrice;
+
+        this.DrawLine(
+            b,
+            I18n.Get(
+                "market_price.history_summary",
+                new
+                {
+                    current = $"{currentPrice}g",
+                    high = $"{highPrice}g",
+                    low = $"{lowPrice}g"
+                }
+            ),
+            x,
+            y
+        );
+
+        y += 55;
+
+        if (history.Count == 0)
+        {
+            this.DrawLine(b, I18n.Get("market_price.history_no_data"), x, y);
+            y += 45;
+            this.UpdateContentHeight(y + 80);
+            return;
+        }
+
+        this.DrawMarketPriceHistoryChart(b, history.ToList(), x, y);
+        y += 315;
+
+        MarketPriceHistoryPoint first = history.First();
+        MarketPriceHistoryPoint last = history.Last();
+
+        this.DrawLine(
+            b,
+            I18n.Get(
+                "market_price.history_range",
+                new
+                {
+                    start = this.FormatHistoryDate(first),
+                    end = this.FormatHistoryDate(last)
+                }
+            ),
+            x,
+            y
+        );
+
+        y += 45;
+
+        this.DrawLine(b, I18n.Get("market_price.history_note"), x, y);
+        y += 45;
+
+        this.UpdateContentHeight(y + 80);
+    }
+
+    private void DrawMarketPriceHistoryChart(SpriteBatch b, List<MarketPriceHistoryPoint> history, int x, int y)
+    {
+        int labelWidth = 70;
+        int chartWidth = 560;
+        int chartHeight = 230;
+
+        int left = x + labelWidth;
+        int top = y;
+        int bottom = y + chartHeight;
+        int right = left + chartWidth;
+
+        int rawMinValue = Math.Max(0, history.Min(p => p.MarketUnitPrice));
+        int rawMaxValue = Math.Max(1, history.Max(p => p.MarketUnitPrice));
+
+        int minValue = this.RoundChartMinimum(rawMinValue);
+        int maxValue = this.RoundChartMaximum(rawMaxValue);
+
+        if (maxValue <= minValue)
+            maxValue = minValue + 10;
+
+        this.DrawMarketPriceChartGrid(
+            b,
+            left,
+            right,
+            top,
+            bottom,
+            minValue,
+            maxValue
+        );
+
+        this.DrawLineSegment(
+            b,
+            new Vector2(left, bottom),
+            new Vector2(right, bottom),
+            2
+        );
+
+        this.DrawLineSegment(
+            b,
+            new Vector2(left, top),
+            new Vector2(left, bottom),
+            2
+        );
+
+        if (history.Count >= 2)
+        {
+            float xStep = chartWidth / (float)(history.Count - 1);
+            Vector2? previousPoint = null;
+
+            for (int i = 0; i < history.Count; i++)
+            {
+                float pointX = left + i * xStep;
+                float normalized = (history[i].MarketUnitPrice - minValue) / (float)(maxValue - minValue);
+                float pointY = bottom - normalized * chartHeight;
+                Vector2 currentPoint = new Vector2(pointX, pointY);
+
+                if (previousPoint.HasValue)
+                {
+                    this.DrawLineSegment(
+                        b,
+                        previousPoint.Value,
+                        currentPoint,
+                        3
+                    );
+                }
+
+                previousPoint = currentPoint;
+
+                b.Draw(
+                    Game1.staminaRect,
+                    new Rectangle(
+                        (int)pointX - 3,
+                        (int)pointY - 3,
+                        6,
+                        6
+                    ),
+                    this.chartColor
+                );
+            }
+        }
+        else
+        {
+            float pointX = left + chartWidth / 2f;
+            float pointY = top + chartHeight / 2f;
+
+            b.Draw(
+                Game1.staminaRect,
+                new Rectangle(
+                    (int)pointX - 4,
+                    (int)pointY - 4,
+                    8,
+                    8
+                ),
+                this.chartColor
+            );
+        }
+    }
+
+    private void DrawMarketPriceChartGrid(
+        SpriteBatch b,
+        int left,
+        int right,
+        int top,
+        int bottom,
+        int minValue,
+        int maxValue
+    )
+    {
+        const int tickCount = 5;
+
+        for (int i = 0; i < tickCount; i++)
+        {
+            float t = i / (float)(tickCount - 1);
+            int value = (int)Math.Round(maxValue - (maxValue - minValue) * t);
+            float y = top + (bottom - top) * t;
+
+            Color gridColor = new Color(160, 135, 100) * 0.35f;
+
+            this.DrawLineSegment(
+                b,
+                new Vector2(left, y),
+                new Vector2(right, y),
+                1,
+                gridColor
+            );
+
+            Utility.drawTextWithShadow(
+                b,
+                $"{value}g",
+                Game1.smallFont,
+                new Vector2(left - 64, y - 12),
+                Game1.textColor
+            );
+        }
+    }
+
+    private int RoundChartMinimum(int value)
+    {
+        if (value <= 0)
+            return 0;
+
+        int step = this.GetChartStep(value);
+        return Math.Max(0, value / step * step);
+    }
+
+    private int RoundChartMaximum(int value)
+    {
+        int step = this.GetChartStep(value);
+        return Math.Max(step, ((value + step - 1) / step) * step);
+    }
+
+    private int GetChartStep(int value)
+    {
+        if (value < 100)
+            return 10;
+
+        if (value < 500)
+            return 25;
+
+        if (value < 1000)
+            return 50;
+
+        if (value < 5000)
+            return 100;
+
+        return 500;
+    }
+
+    private string FormatHistoryDate(MarketPriceHistoryPoint point)
+    {
+        string seasonKey = point.Season switch
+        {
+            "spring" => "season.spring",
+            "summer" => "season.summer",
+            "fall" => "season.fall",
+            "winter" => "season.winter",
+            _ => "season.spring"
+        };
+
+        return $"{I18n.Get(seasonKey)} {point.Day}";
+    }
+
     private void DrawMarketPriceHeader(SpriteBatch b, int x, int y)
     {
-        this.marketPriceItemHeaderBounds = new Rectangle(x + 55, y - 5, 220, 35);
-        this.marketPriceMarketHeaderBounds = new Rectangle(x + 295, y - 5, 120, 35);
-        this.marketPriceBaseHeaderBounds = new Rectangle(x + 430, y - 5, 100, 35);
-        this.marketPriceMultiplierHeaderBounds = new Rectangle(x + 540, y - 5, 130, 35);
+        this.marketPriceItemHeaderBounds = new Rectangle(x + 55, y - 5, 200, 35);
+        this.marketPriceMarketHeaderBounds = new Rectangle(x + 260, y - 5, 100, 35);
+        this.marketPriceBaseHeaderBounds = new Rectangle(x + 365, y - 5, 85, 35);
+        this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(x + 455, y - 5, 120, 35);
+        this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(x + 580, y - 5, 120, 35);
 
         this.DrawLine(
             b,
@@ -604,21 +958,28 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.DrawLine(
             b,
             I18n.Get("market_price.header_market_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.MarketPrice),
-            x + 295,
+            x + 260,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_base_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.BasePrice),
-            x + 430,
+            x + 365,
             y
         );
 
         this.DrawLine(
             b,
-            I18n.Get("market_price.header_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.Multiplier),
-            x + 540,
+            I18n.Get("market_price.header_daily_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.DailyMultiplier),
+            x + 455,
+            y
+        );
+
+        this.DrawLine(
+            b,
+            I18n.Get("market_price.header_total_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.TotalMultiplier),
+            x + 580,
             y
         );
     }
@@ -656,16 +1017,24 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.DrawColoredText(
             b,
             this.FormatMarketUnitPrice(entry.MarketUnitPrice),
-            x + 295,
+            x + 260,
             y,
-            this.GetMarketMultiplierColor(entry.MarketMultiplier),
+            this.GetMarketMultiplierColor(entry.TotalMultiplier),
             scale
         );
-        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 430, y, Game1.textColor, scale);
+        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 365, y, Game1.textColor, scale);
         this.DrawColoredText(
             b,
-            this.FormatMultiplier(entry.MarketMultiplier),
-            x + 540,
+            this.FormatMultiplier(entry.DailyMultiplier),
+            x + 455,
+            y,
+            Game1.textColor,
+            scale
+        );
+        this.DrawColoredText(
+            b,
+            this.FormatMultiplier(entry.TotalMultiplier),
+            x + 580,
             y,
             Game1.textColor,
             scale
@@ -1124,7 +1493,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         SpriteBatch b,
         Vector2 start,
         Vector2 end,
-        int thickness
+        int thickness,
+        Color? color = null
     )
     {
         Vector2 edge = end - start;
@@ -1140,7 +1510,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
                 thickness
             ),
             null,
-            this.chartColor,
+            color ?? this.chartColor,
             angle,
             Vector2.Zero,
             SpriteEffects.None,

@@ -18,6 +18,10 @@ public class MarketPriceTableEntry
 
     public double MarketMultiplier { get; set; }
 
+    public double DailyMultiplier { get; set; } = 1.0;
+
+    public double TotalMultiplier { get; set; } = 1.0;
+
     public double MarketUnitPrice { get; set; }
 
     public double Difference { get; set; }

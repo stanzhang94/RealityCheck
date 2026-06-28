@@ -132,10 +132,18 @@
   "income.unclassified_channel": "Revenu non classé",
   "tab.market_price": "Prix marché",
   "market_price.title": "Prix du marché",
-  "market_price.multiplier_note": "Item daily factor: {{min}} to {{max}}; weather, festival, off-season, and artisan transmission factors included",
+  "market_price.multiplier_note": "Inclut tendance longue, météo, festivals, hors-saison et transmission artisanale",
   "market_price.header_item": "Objet",
   "market_price.header_market_price": "Prix du marché",
   "market_price.header_base_price": "Base",
   "market_price.header_multiplier": "Taux",
-  "market_price.no_items": "Aucun objet vendable trouvé."
+  "market_price.no_items": "Aucun objet vendable trouvé.",
+  "market_price.header_daily_multiplier": "Jour",
+  "market_price.header_total_multiplier": "Total",
+  "market_price.history_back": "Retour",
+  "market_price.history_title": "Historique du prix : {{item}}",
+  "market_price.history_summary": "Actuel {{current}}  Haut {{high}}  Bas {{low}}",
+  "market_price.history_no_data": "Aucun historique de prix pour le moment.",
+  "market_price.history_range": "Période : {{start}} à {{end}}",
+  "market_price.history_note": "L’historique conserve les 28 derniers jours des biens découverts."
 }

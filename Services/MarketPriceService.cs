@@ -11,14 +11,15 @@ namespace RealityCheck.Services;
 
 public class MarketPriceService
 {
-    public const double MinimumItemDailyFactor = 0.90;
-    public const double MaximumItemDailyFactor = 1.10;
+    public const double MinimumItemDailyFactor = 0.95;
+    public const double MaximumItemDailyFactor = 1.05;
 
     private readonly ConfigService configService;
     private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly WeatherFactorService weatherFactorService;
     private readonly FestivalFactorService festivalFactorService;
     private readonly OffSeasonFactorService offSeasonFactorService;
+    private readonly MarketTrendService marketTrendService;
     private readonly IMonitor monitor;
 
     public MarketPriceService(
@@ -27,6 +28,7 @@ public class MarketPriceService
         WeatherFactorService weatherFactorService,
         FestivalFactorService festivalFactorService,
         OffSeasonFactorService offSeasonFactorService,
+        MarketTrendService marketTrendService,
         IMonitor monitor
     )
     {
@@ -35,6 +37,7 @@ public class MarketPriceService
         this.weatherFactorService = weatherFactorService;
         this.festivalFactorService = festivalFactorService;
         this.offSeasonFactorService = offSeasonFactorService;
+        this.marketTrendService = marketTrendService;
         this.monitor = monitor;
     }
 
@@ -121,8 +124,25 @@ public class MarketPriceService
                 ? item.QualifiedItemId
                 : category.MarketCommodityKey;
 
-            double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey, item);
-            int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
+            MarketPriceFactorBreakdown factors = this.GetCurrentMarketFactorBreakdown(
+                category,
+                marketCommodityKey,
+                item
+            );
+
+            int marketUnitPrice = this.CalculateMarketUnitPrice(
+                baseUnitPrice,
+                factors.TotalMultiplier
+            );
+
+            this.RecordMarketPriceHistory(
+                marketCommodityKey,
+                item.QualifiedItemId,
+                item.DisplayName,
+                baseUnitPrice,
+                marketUnitPrice,
+                factors
+            );
 
             var entry = new MarketPriceTableEntry
             {
@@ -131,7 +151,9 @@ public class MarketPriceService
                 ParentItemId = category.ParentItemId,
                 ItemName = item.DisplayName,
                 BaseUnitPrice = baseUnitPrice,
-                MarketMultiplier = multiplier,
+                DailyMultiplier = factors.DailyMultiplier,
+                TotalMultiplier = factors.TotalMultiplier,
+                MarketMultiplier = factors.TotalMultiplier,
                 MarketUnitPrice = marketUnitPrice,
                 Difference = marketUnitPrice - baseUnitPrice,
                 IconItem = item
@@ -191,14 +213,25 @@ public class MarketPriceService
                 ParentItemId = entry.ParentItemId,
                 ExclusionReason = string.Empty
             };
-            double multiplier = this.GetCurrentMarketMultiplier(
+
+            MarketPriceFactorBreakdown factors = this.GetCurrentMarketFactorBreakdown(
                 category,
                 entry.MarketCommodityKey,
                 iconItem
             );
+
             int marketUnitPrice = this.CalculateMarketUnitPrice(
                 baseUnitPrice,
-                multiplier
+                factors.TotalMultiplier
+            );
+
+            this.RecordMarketPriceHistory(
+                entry.MarketCommodityKey,
+                entry.ItemId,
+                entry.ItemName,
+                baseUnitPrice,
+                marketUnitPrice,
+                factors
             );
 
             entries.Add(
@@ -210,7 +243,9 @@ public class MarketPriceService
                     IsDiscoveredArtisan = true,
                     ItemName = entry.ItemName,
                     BaseUnitPrice = baseUnitPrice,
-                    MarketMultiplier = multiplier,
+                    DailyMultiplier = factors.DailyMultiplier,
+                    TotalMultiplier = factors.TotalMultiplier,
+                    MarketMultiplier = factors.TotalMultiplier,
                     MarketUnitPrice = marketUnitPrice,
                     Difference = marketUnitPrice - baseUnitPrice,
                     IconItem = iconItem
@@ -292,6 +327,8 @@ public class MarketPriceService
                 BaseUnitPrice = safeBaseUnitPrice,
                 BaseTotal = baseTotal,
                 MarketMultiplier = 1.0,
+                DailyMultiplier = 1.0,
+                TotalMultiplier = 1.0,
                 MarketTotal = baseTotal,
                 MarketUnitPrice = safeBaseUnitPrice
             };
@@ -301,8 +338,25 @@ public class MarketPriceService
             ? item.QualifiedItemId
             : category.MarketCommodityKey;
 
-        double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey, item);
-        int marketTotal = this.CalculateMarketTotal(baseTotal, multiplier);
+        MarketPriceFactorBreakdown factors = this.GetCurrentMarketFactorBreakdown(
+            category,
+            marketCommodityKey,
+            item
+        );
+
+        int marketTotal = this.CalculateMarketTotal(baseTotal, factors.TotalMultiplier);
+        int marketUnitPrice = safeQuantity > 0
+            ? Math.Max(0, (int)Math.Round((double)marketTotal / safeQuantity, MidpointRounding.AwayFromZero))
+            : 0;
+
+        this.RecordMarketPriceHistory(
+            marketCommodityKey,
+            item.QualifiedItemId,
+            item.DisplayName,
+            safeBaseUnitPrice,
+            marketUnitPrice,
+            factors
+        );
 
         return new MarketPriceResult
         {
@@ -311,7 +365,9 @@ public class MarketPriceService
             Quantity = safeQuantity,
             BaseUnitPrice = safeBaseUnitPrice,
             BaseTotal = baseTotal,
-            MarketMultiplier = multiplier,
+            MarketMultiplier = factors.TotalMultiplier,
+            DailyMultiplier = factors.DailyMultiplier,
+            TotalMultiplier = factors.TotalMultiplier,
             MarketTotal = marketTotal,
             MarketUnitPrice = safeQuantity > 0
                 ? (double)marketTotal / safeQuantity
@@ -351,10 +407,27 @@ public class MarketPriceService
             ? item.QualifiedItemId
             : category.MarketCommodityKey;
 
-        return this.CalculateMarketUnitPrice(
-            safeBaseUnitPrice,
-            this.GetCurrentMarketMultiplier(category, marketCommodityKey, item)
+        MarketPriceFactorBreakdown factors = this.GetCurrentMarketFactorBreakdown(
+            category,
+            marketCommodityKey,
+            item
         );
+
+        int marketUnitPrice = this.CalculateMarketUnitPrice(
+            safeBaseUnitPrice,
+            factors.TotalMultiplier
+        );
+
+        this.RecordMarketPriceHistory(
+            marketCommodityKey,
+            item.QualifiedItemId,
+            item.DisplayName,
+            safeBaseUnitPrice,
+            marketUnitPrice,
+            factors
+        );
+
+        return marketUnitPrice;
     }
 
     public double GetCurrentMarketMultiplier(
@@ -363,16 +436,39 @@ public class MarketPriceService
         Item? item = null
     )
     {
+        return this.GetCurrentMarketFactorBreakdown(
+            category,
+            marketCommodityKey,
+            item
+        ).TotalMultiplier;
+    }
+
+    public MarketPriceFactorBreakdown GetCurrentMarketFactorBreakdown(
+        MarketCategoryResult category,
+        string marketCommodityKey,
+        Item? item = null
+    )
+    {
         double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
+        MarketTrendSnapshot trend = this.marketTrendService.GetTrendSnapshot(marketCommodityKey);
 
         if (category.IsFlavoredArtisan)
         {
-            double artisanTransmissionFactor = this.GetArtisanTransmissionFactor(category);
+            MarketPriceFactorBreakdown artisanTransmission = this.GetArtisanTransmissionFactor(category);
 
-            return CombineFactorDeltas(
-                itemDailyFactor,
-                artisanTransmissionFactor
-            );
+            return new MarketPriceFactorBreakdown
+            {
+                DailyMultiplier = CombineFactorDeltas(
+                    trend.TodayTrendChange,
+                    itemDailyFactor,
+                    artisanTransmission.DailyMultiplier
+                ),
+                TotalMultiplier = CombineFactorDeltas(
+                    trend.LongTermFactor,
+                    itemDailyFactor,
+                    artisanTransmission.TotalMultiplier
+                )
+            };
         }
 
         double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
@@ -383,26 +479,37 @@ public class MarketPriceService
             marketCommodityKey
         );
 
-        return CombineFactorDeltas(
-            itemDailyFactor,
-            weatherFactor,
-            festivalFactor,
-            offSeasonFactor
-        );
+        return new MarketPriceFactorBreakdown
+        {
+            DailyMultiplier = CombineFactorDeltas(
+                trend.TodayTrendChange,
+                itemDailyFactor,
+                weatherFactor,
+                festivalFactor,
+                offSeasonFactor
+            ),
+            TotalMultiplier = CombineFactorDeltas(
+                trend.LongTermFactor,
+                itemDailyFactor,
+                weatherFactor,
+                festivalFactor,
+                offSeasonFactor
+            )
+        };
     }
 
-    private double GetArtisanTransmissionFactor(MarketCategoryResult artisanCategory)
+    private MarketPriceFactorBreakdown GetArtisanTransmissionFactor(MarketCategoryResult artisanCategory)
     {
         if (!artisanCategory.IsFlavoredArtisan)
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
 
         if (string.IsNullOrWhiteSpace(artisanCategory.ParentItemId))
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
 
         Item? parentItem = this.TryCreateIconItem(artisanCategory.ParentItemId);
 
         if (parentItem is null)
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
 
         int parentBaseUnitPrice;
 
@@ -412,7 +519,7 @@ public class MarketPriceService
         }
         catch
         {
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
         }
 
         MarketCategoryResult parentCategory = this.marketCategoryResolver.Resolve(
@@ -421,34 +528,36 @@ public class MarketPriceService
         );
 
         if (!parentCategory.IsMarketManaged)
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
 
         if (parentCategory.IsFlavoredArtisan)
-            return 1.0;
+            return new MarketPriceFactorBreakdown();
 
         string parentMarketCommodityKey = string.IsNullOrWhiteSpace(parentCategory.MarketCommodityKey)
             ? parentItem.QualifiedItemId
             : parentCategory.MarketCommodityKey;
 
-        double parentMultiplier = this.GetBaseMarketMultiplierWithoutArtisanTransmission(
+        MarketPriceFactorBreakdown parentFactors = this.GetBaseMarketFactorBreakdownWithoutArtisanTransmission(
             parentCategory,
             parentMarketCommodityKey,
             parentItem
         );
 
-        double parentDelta = parentMultiplier - 1.0;
-        double transmittedDelta = parentDelta * 0.5;
-
-        return Math.Max(0.0, 1.0 + transmittedDelta);
+        return new MarketPriceFactorBreakdown
+        {
+            DailyMultiplier = Math.Max(0.0, 1.0 + (parentFactors.DailyMultiplier - 1.0) * 0.5),
+            TotalMultiplier = Math.Max(0.0, 1.0 + (parentFactors.TotalMultiplier - 1.0) * 0.5)
+        };
     }
 
-    private double GetBaseMarketMultiplierWithoutArtisanTransmission(
+    private MarketPriceFactorBreakdown GetBaseMarketFactorBreakdownWithoutArtisanTransmission(
         MarketCategoryResult category,
         string marketCommodityKey,
         Item? item
     )
     {
         double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
+        MarketTrendSnapshot trend = this.marketTrendService.GetTrendSnapshot(marketCommodityKey);
         double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
         double festivalFactor = this.festivalFactorService.GetFestivalFactor(category.Category);
         double offSeasonFactor = this.offSeasonFactorService.GetOffSeasonFactor(
@@ -457,11 +566,42 @@ public class MarketPriceService
             marketCommodityKey
         );
 
-        return CombineFactorDeltas(
-            itemDailyFactor,
-            weatherFactor,
-            festivalFactor,
-            offSeasonFactor
+        return new MarketPriceFactorBreakdown
+        {
+            DailyMultiplier = CombineFactorDeltas(
+                trend.TodayTrendChange,
+                itemDailyFactor,
+                weatherFactor,
+                festivalFactor,
+                offSeasonFactor
+            ),
+            TotalMultiplier = CombineFactorDeltas(
+                trend.LongTermFactor,
+                itemDailyFactor,
+                weatherFactor,
+                festivalFactor,
+                offSeasonFactor
+            )
+        };
+    }
+
+    private void RecordMarketPriceHistory(
+        string marketCommodityKey,
+        string itemId,
+        string itemName,
+        int baseUnitPrice,
+        int marketUnitPrice,
+        MarketPriceFactorBreakdown factors
+    )
+    {
+        this.marketTrendService.RecordPrice(
+            marketCommodityKey,
+            itemId,
+            itemName,
+            baseUnitPrice,
+            marketUnitPrice,
+            factors.DailyMultiplier,
+            factors.TotalMultiplier
         );
     }
 
@@ -478,6 +618,12 @@ public class MarketPriceService
         }
 
         return Math.Max(0.0, total);
+    }
+
+
+    public IReadOnlyList<MarketPriceHistoryPoint> GetMarketPriceHistory(string marketCommodityKey)
+    {
+        return this.marketTrendService.GetHistory(marketCommodityKey);
     }
 
     public int CalculateMarketUnitPrice(

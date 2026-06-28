@@ -14,6 +14,10 @@ public class MarketPriceResult
 
     public double MarketMultiplier { get; set; } = 1.0;
 
+    public double DailyMultiplier { get; set; } = 1.0;
+
+    public double TotalMultiplier { get; set; } = 1.0;
+
     public int MarketTotal { get; set; }
 
     public double MarketUnitPrice { get; set; }

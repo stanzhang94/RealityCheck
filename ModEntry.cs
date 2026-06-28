@@ -20,6 +20,7 @@ public class ModEntry : Mod
     private MarketPriceService? marketPriceService;
     private WeatherFactorService? weatherFactorService;
     private FestivalFactorService? festivalFactorService;
+    private OffSeasonFactorService? offSeasonFactorService;
     private ArtisanIdentityService? artisanIdentityService;
     private MarketCategoryResolver? marketCategoryResolver;
     private TaxEvents taxEvents = null!;
@@ -55,12 +56,14 @@ public class ModEntry : Mod
 
         this.weatherFactorService = new WeatherFactorService();
         this.festivalFactorService = new FestivalFactorService();
+        this.offSeasonFactorService = new OffSeasonFactorService();
 
         this.marketPriceService = new MarketPriceService(
             this.configService,
             this.marketCategoryResolver,
             this.weatherFactorService,
             this.festivalFactorService,
+            this.offSeasonFactorService,
             this.Monitor
         );
 

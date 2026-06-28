@@ -18,6 +18,7 @@ public class MarketPriceService
     private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly WeatherFactorService weatherFactorService;
     private readonly FestivalFactorService festivalFactorService;
+    private readonly OffSeasonFactorService offSeasonFactorService;
     private readonly IMonitor monitor;
 
     public MarketPriceService(
@@ -25,6 +26,7 @@ public class MarketPriceService
         MarketCategoryResolver marketCategoryResolver,
         WeatherFactorService weatherFactorService,
         FestivalFactorService festivalFactorService,
+        OffSeasonFactorService offSeasonFactorService,
         IMonitor monitor
     )
     {
@@ -32,6 +34,7 @@ public class MarketPriceService
         this.marketCategoryResolver = marketCategoryResolver;
         this.weatherFactorService = weatherFactorService;
         this.festivalFactorService = festivalFactorService;
+        this.offSeasonFactorService = offSeasonFactorService;
         this.monitor = monitor;
     }
 
@@ -118,7 +121,7 @@ public class MarketPriceService
                 ? item.QualifiedItemId
                 : category.MarketCommodityKey;
 
-            double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey);
+            double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey, item);
             int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
 
             var entry = new MarketPriceTableEntry
@@ -177,19 +180,19 @@ public class MarketPriceService
             if (baseUnitPrice < MarketCategoryResolver.MinimumMarketManagedBaseUnitPrice)
                 continue;
 
+            Item? iconItem = this.TryCreateIconItem(entry.ItemId);
             double multiplier = this.GetCurrentMarketMultiplier(
                 this.marketCategoryResolver.Resolve(
-                    this.TryCreateIconItem(entry.ItemId),
+                    iconItem,
                     baseUnitPrice
                 ),
-                entry.MarketCommodityKey
+                entry.MarketCommodityKey,
+                iconItem
             );
             int marketUnitPrice = this.CalculateMarketUnitPrice(
                 baseUnitPrice,
                 multiplier
             );
-
-            Item? iconItem = this.TryCreateIconItem(entry.ItemId);
 
             entries.Add(
                 new MarketPriceTableEntry
@@ -291,7 +294,7 @@ public class MarketPriceService
             ? item.QualifiedItemId
             : category.MarketCommodityKey;
 
-        double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey);
+        double multiplier = this.GetCurrentMarketMultiplier(category, marketCommodityKey, item);
         int marketTotal = this.CalculateMarketTotal(baseTotal, multiplier);
 
         return new MarketPriceResult
@@ -343,23 +346,30 @@ public class MarketPriceService
 
         return this.CalculateMarketUnitPrice(
             safeBaseUnitPrice,
-            this.GetCurrentMarketMultiplier(category, marketCommodityKey)
+            this.GetCurrentMarketMultiplier(category, marketCommodityKey, item)
         );
     }
 
     public double GetCurrentMarketMultiplier(
         MarketCategoryResult category,
-        string marketCommodityKey
+        string marketCommodityKey,
+        Item? item = null
     )
     {
         double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
         double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
         double festivalFactor = this.festivalFactorService.GetFestivalFactor(category.Category);
+        double offSeasonFactor = this.offSeasonFactorService.GetOffSeasonFactor(
+            category,
+            item,
+            marketCommodityKey
+        );
 
         return CombineFactorDeltas(
             itemDailyFactor,
             weatherFactor,
-            festivalFactor
+            festivalFactor,
+            offSeasonFactor
         );
     }
 

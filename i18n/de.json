@@ -132,7 +132,7 @@
   "income.unclassified_channel": "Nicht klassifizierte Einnahmen",
   "tab.market_price": "Marktpreis",
   "market_price.title": "Marktpreis",
-  "market_price.multiplier_note": "Täglicher Gegenstandsfaktor: {{min}} bis {{max}}; Wetter- und Festfaktoren enthalten",
+  "market_price.multiplier_note": "Täglicher Gegenstandsfaktor: {{min}} bis {{max}}; Wetter-, Fest- und Saisonfaktoren enthalten",
   "market_price.header_item": "Gegenstand",
   "market_price.header_market_price": "Marktpreis",
   "market_price.header_base_price": "Basis",

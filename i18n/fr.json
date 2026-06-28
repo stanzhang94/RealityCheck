@@ -132,7 +132,7 @@
   "income.unclassified_channel": "Revenu non classé",
   "tab.market_price": "Prix marché",
   "market_price.title": "Prix du marché",
-  "market_price.multiplier_note": "Facteur quotidien par objet : {{min}} à {{max}} ; météo, festivals et hors-saison inclus",
+  "market_price.multiplier_note": "Item daily factor: {{min}} to {{max}}; weather, festival, off-season, and artisan transmission factors included",
   "market_price.header_item": "Objet",
   "market_price.header_market_price": "Prix du marché",
   "market_price.header_base_price": "Base",

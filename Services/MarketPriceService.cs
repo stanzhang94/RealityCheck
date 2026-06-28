@@ -181,11 +181,18 @@ public class MarketPriceService
                 continue;
 
             Item? iconItem = this.TryCreateIconItem(entry.ItemId);
+            MarketCategoryResult category = new()
+            {
+                Category = "FlavoredArtisan",
+                IsMarketManaged = true,
+                IsFlavoredArtisan = true,
+                IsGenericFlavoredArtisanTemplate = false,
+                MarketCommodityKey = entry.MarketCommodityKey,
+                ParentItemId = entry.ParentItemId,
+                ExclusionReason = string.Empty
+            };
             double multiplier = this.GetCurrentMarketMultiplier(
-                this.marketCategoryResolver.Resolve(
-                    iconItem,
-                    baseUnitPrice
-                ),
+                category,
                 entry.MarketCommodityKey,
                 iconItem
             );
@@ -354,6 +361,91 @@ public class MarketPriceService
         MarketCategoryResult category,
         string marketCommodityKey,
         Item? item = null
+    )
+    {
+        double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
+
+        if (category.IsFlavoredArtisan)
+        {
+            double artisanTransmissionFactor = this.GetArtisanTransmissionFactor(category);
+
+            return CombineFactorDeltas(
+                itemDailyFactor,
+                artisanTransmissionFactor
+            );
+        }
+
+        double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
+        double festivalFactor = this.festivalFactorService.GetFestivalFactor(category.Category);
+        double offSeasonFactor = this.offSeasonFactorService.GetOffSeasonFactor(
+            category,
+            item,
+            marketCommodityKey
+        );
+
+        return CombineFactorDeltas(
+            itemDailyFactor,
+            weatherFactor,
+            festivalFactor,
+            offSeasonFactor
+        );
+    }
+
+    private double GetArtisanTransmissionFactor(MarketCategoryResult artisanCategory)
+    {
+        if (!artisanCategory.IsFlavoredArtisan)
+            return 1.0;
+
+        if (string.IsNullOrWhiteSpace(artisanCategory.ParentItemId))
+            return 1.0;
+
+        Item? parentItem = this.TryCreateIconItem(artisanCategory.ParentItemId);
+
+        if (parentItem is null)
+            return 1.0;
+
+        int parentBaseUnitPrice;
+
+        try
+        {
+            parentBaseUnitPrice = Math.Max(0, parentItem.sellToStorePrice(-1L));
+        }
+        catch
+        {
+            return 1.0;
+        }
+
+        MarketCategoryResult parentCategory = this.marketCategoryResolver.Resolve(
+            parentItem,
+            parentBaseUnitPrice
+        );
+
+        if (!parentCategory.IsMarketManaged)
+            return 1.0;
+
+        if (parentCategory.IsFlavoredArtisan)
+            return 1.0;
+
+        string parentMarketCommodityKey = string.IsNullOrWhiteSpace(parentCategory.MarketCommodityKey)
+            ? parentItem.QualifiedItemId
+            : parentCategory.MarketCommodityKey;
+
+        double parentMultiplier = this.GetBaseMarketMultiplierWithoutArtisanTransmission(
+            parentCategory,
+            parentMarketCommodityKey,
+            parentItem
+        );
+
+        double parentDelta = parentMultiplier - 1.0;
+        double transmittedDelta = parentDelta * 0.5;
+
+        return Math.Max(0.0, 1.0 + transmittedDelta);
+    }
+
+    private double GetBaseMarketMultiplierWithoutArtisanTransmission(
+        MarketCategoryResult category,
+        string marketCommodityKey,
+        Item? item
     )
     {
         double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);

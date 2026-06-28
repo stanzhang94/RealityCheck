@@ -132,7 +132,7 @@
   "income.unclassified_channel": "Unclassified Income",
   "tab.market_price": "Market Price",
   "market_price.title": "Market Price",
-  "market_price.multiplier_note": "Item daily factor: {{min}} to {{max}}; weather factor included",
+  "market_price.multiplier_note": "Item daily factor: {{min}} to {{max}}; weather and festival factors included",
   "market_price.header_item": "Item",
   "market_price.header_market_price": "Market Price",
   "market_price.header_base_price": "Base",

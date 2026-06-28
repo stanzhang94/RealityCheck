@@ -17,18 +17,21 @@ public class MarketPriceService
     private readonly ConfigService configService;
     private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly WeatherFactorService weatherFactorService;
+    private readonly FestivalFactorService festivalFactorService;
     private readonly IMonitor monitor;
 
     public MarketPriceService(
         ConfigService configService,
         MarketCategoryResolver marketCategoryResolver,
         WeatherFactorService weatherFactorService,
+        FestivalFactorService festivalFactorService,
         IMonitor monitor
     )
     {
         this.configService = configService;
         this.marketCategoryResolver = marketCategoryResolver;
         this.weatherFactorService = weatherFactorService;
+        this.festivalFactorService = festivalFactorService;
         this.monitor = monitor;
     }
 
@@ -351,10 +354,12 @@ public class MarketPriceService
     {
         double itemDailyFactor = this.GetItemDailyFactor(marketCommodityKey);
         double weatherFactor = this.weatherFactorService.GetWeatherFactor(category.Category);
+        double festivalFactor = this.festivalFactorService.GetFestivalFactor(category.Category);
 
         return CombineFactorDeltas(
             itemDailyFactor,
-            weatherFactor
+            weatherFactor,
+            festivalFactor
         );
     }
 

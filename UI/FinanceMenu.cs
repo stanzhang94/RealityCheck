@@ -553,7 +553,11 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             b,
             I18n.Get(
                 "market_price.multiplier_note",
-                new { multiplier = this.FormatMultiplier(this.marketPriceService.GetShadowPriceMultiplier()) }
+                new
+                {
+                    min = this.marketPriceService.GetItemDailyFactorMinimumLabel(),
+                    max = this.marketPriceService.GetItemDailyFactorMaximumLabel()
+                }
             ),
             x,
             y
@@ -714,7 +718,10 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private string FormatMultiplier(double multiplier)
     {
-        return multiplier.ToString("0.##");
+        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier < 0)
+            return "1.000";
+
+        return multiplier.ToString("0.000");
     }
 
     private void DrawTaxReport(SpriteBatch b, int x, int y)

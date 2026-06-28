@@ -132,7 +132,7 @@
   "income.unclassified_channel": "未分類の収入",
   "tab.market_price": "市場価格",
   "market_price.title": "市場価格",
-  "market_price.multiplier_note": "現在のテスト倍率：x{{multiplier}}",
+  "market_price.multiplier_note": "アイテム日次係数：{{min}} から {{max}}",
   "market_price.header_item": "アイテム",
   "market_price.header_market_price": "市場価格",
   "market_price.header_base_price": "基本価格",

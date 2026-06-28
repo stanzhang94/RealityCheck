@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
@@ -10,6 +11,9 @@ namespace RealityCheck.Services;
 
 public class MarketPriceService
 {
+    public const double MinimumItemDailyFactor = 0.90;
+    public const double MaximumItemDailyFactor = 1.10;
+
     private readonly ConfigService configService;
     private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly IMonitor monitor;
@@ -40,6 +44,15 @@ public class MarketPriceService
         return this.configService.Config.Market.EnableShippingBinMarketSettlement;
     }
 
+    public string GetItemDailyFactorMinimumLabel()
+    {
+        return MinimumItemDailyFactor.ToString("0.000");
+    }
+
+    public string GetItemDailyFactorMaximumLabel()
+    {
+        return MaximumItemDailyFactor.ToString("0.000");
+    }
 
     public List<MarketPriceTableEntry> GetSellableObjectMarketPriceTable(
         IEnumerable<LedgerEntry>? ledgerEntries = null
@@ -84,19 +97,29 @@ public class MarketPriceService
                 continue;
             }
 
-            if (!this.ShouldApplyMarketPricing(item, baseUnitPrice))
+            MarketCategoryResult category = this.marketCategoryResolver.Resolve(
+                item,
+                baseUnitPrice
+            );
+
+            if (!category.IsMarketManaged)
                 continue;
 
-            if (this.IsGenericFlavoredArtisanTemplate(item))
+            if (category.IsGenericFlavoredArtisanTemplate)
                 continue;
 
-            double multiplier = this.GetShadowPriceMultiplier();
+            string marketCommodityKey = string.IsNullOrWhiteSpace(category.MarketCommodityKey)
+                ? item.QualifiedItemId
+                : category.MarketCommodityKey;
+
+            double multiplier = this.GetItemDailyFactor(marketCommodityKey);
             int marketUnitPrice = this.CalculateMarketUnitPrice(baseUnitPrice, multiplier);
 
             var entry = new MarketPriceTableEntry
             {
                 ItemId = item.QualifiedItemId,
-                MarketCommodityKey = item.QualifiedItemId,
+                MarketCommodityKey = marketCommodityKey,
+                ParentItemId = category.ParentItemId,
                 ItemName = item.DisplayName,
                 BaseUnitPrice = baseUnitPrice,
                 MarketMultiplier = multiplier,
@@ -121,8 +144,6 @@ public class MarketPriceService
             .ToList();
     }
 
-
-
     private void AddDiscoveredFlavoredArtisanEntries(
         List<MarketPriceTableEntry> entries,
         HashSet<string> entryKeys,
@@ -132,7 +153,6 @@ public class MarketPriceService
         if (ledgerEntries is null)
             return;
 
-        double multiplier = this.GetShadowPriceMultiplier();
         HashSet<string> added = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (LedgerEntry entry in ledgerEntries.Reverse())
@@ -151,6 +171,7 @@ public class MarketPriceService
             if (baseUnitPrice < MarketCategoryResolver.MinimumMarketManagedBaseUnitPrice)
                 continue;
 
+            double multiplier = this.GetItemDailyFactor(entry.MarketCommodityKey);
             int marketUnitPrice = this.CalculateMarketUnitPrice(
                 baseUnitPrice,
                 multiplier
@@ -198,11 +219,6 @@ public class MarketPriceService
         return true;
     }
 
-    private bool IsGenericFlavoredArtisanTemplate(Item item)
-    {
-        return this.marketCategoryResolver.IsGenericFlavoredArtisanTemplate(item);
-    }
-
     private Item? TryCreateIconItem(string itemId)
     {
         if (string.IsNullOrWhiteSpace(itemId))
@@ -217,7 +233,6 @@ public class MarketPriceService
             return null;
         }
     }
-
 
     public bool ShouldApplyMarketPricing(
         Item? item,
@@ -240,7 +255,12 @@ public class MarketPriceService
         int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
         int baseTotal = safeBaseUnitPrice * safeQuantity;
 
-        if (!this.ShouldApplyMarketPricing(item, safeBaseUnitPrice))
+        MarketCategoryResult category = this.marketCategoryResolver.Resolve(
+            item,
+            safeBaseUnitPrice
+        );
+
+        if (!category.IsMarketManaged)
         {
             return new MarketPriceResult
             {
@@ -255,7 +275,11 @@ public class MarketPriceService
             };
         }
 
-        double multiplier = this.GetShadowPriceMultiplier();
+        string marketCommodityKey = string.IsNullOrWhiteSpace(category.MarketCommodityKey)
+            ? item.QualifiedItemId
+            : category.MarketCommodityKey;
+
+        double multiplier = this.GetItemDailyFactor(marketCommodityKey);
         int marketTotal = this.CalculateMarketTotal(baseTotal, multiplier);
 
         return new MarketPriceResult
@@ -272,7 +296,6 @@ public class MarketPriceService
                 : 0.0
         };
     }
-
 
     public MarketPriceResult GetShippingBinShadowSellPrice(
         Item item,
@@ -294,12 +317,21 @@ public class MarketPriceService
     {
         int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
 
-        if (!this.ShouldApplyMarketPricing(item, safeBaseUnitPrice))
+        MarketCategoryResult category = this.marketCategoryResolver.Resolve(
+            item,
+            safeBaseUnitPrice
+        );
+
+        if (!category.IsMarketManaged)
             return safeBaseUnitPrice;
+
+        string marketCommodityKey = string.IsNullOrWhiteSpace(category.MarketCommodityKey)
+            ? item.QualifiedItemId
+            : category.MarketCommodityKey;
 
         return this.CalculateMarketUnitPrice(
             safeBaseUnitPrice,
-            this.GetShadowPriceMultiplier()
+            this.GetItemDailyFactor(marketCommodityKey)
         );
     }
 
@@ -341,20 +373,35 @@ public class MarketPriceService
         );
     }
 
-    public double GetShadowPriceMultiplier()
+    public double GetItemDailyFactor(string marketCommodityKey)
     {
-        double multiplier = this.configService.Config.Market.ShadowPriceMultiplier;
-
-        if (double.IsNaN(multiplier) || double.IsInfinity(multiplier) || multiplier <= 0)
-        {
-            this.monitor.Log(
-                $"Invalid shadow market multiplier {multiplier:0.###}; falling back to 1.0.",
-                LogLevel.Warn
-            );
-
+        if (string.IsNullOrWhiteSpace(marketCommodityKey))
             return 1.0;
-        }
 
-        return multiplier;
+        string seed = $"{Game1.uniqueIDForThisGame}|{Game1.year}|{Game1.currentSeason}|{Game1.dayOfMonth}|{marketCommodityKey}";
+        ulong hash = ComputeStableHash(seed);
+        double normalized = hash / (double)ulong.MaxValue;
+
+        return MinimumItemDailyFactor
+            + normalized * (MaximumItemDailyFactor - MinimumItemDailyFactor);
+    }
+
+    private static ulong ComputeStableHash(string text)
+    {
+        const ulong offsetBasis = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
+
+        unchecked
+        {
+            ulong hash = offsetBasis;
+
+            foreach (byte value in Encoding.UTF8.GetBytes(text))
+            {
+                hash ^= value;
+                hash *= prime;
+            }
+
+            return hash;
+        }
     }
 }

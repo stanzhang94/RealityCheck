@@ -19,8 +19,6 @@ public class MarketConfig
     public bool EnableShippingSettlementVerboseTrace { get; set; } = false;
 
     public bool EnableShippingBinMarketSettlement { get; set; } = true;
-
-    public double ShadowPriceMultiplier { get; set; } = 1.20;
 }
 
 public class TaxConfig

@@ -20,4 +20,6 @@ public class SaveData
     // Positive internal value.
     // UI may display this as negative debt if needed.
     public int OutstandingBalance { get; set; } = 0;
+
+    public List<string> FavoriteMarketCommodityKeys { get; set; } = new();
 }

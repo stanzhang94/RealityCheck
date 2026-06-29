@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using RealityCheck.Models;
 using RealityCheck.Services;
 using StardewValley;
@@ -11,7 +13,7 @@ using StardewValley.Menus;
 
 namespace RealityCheck.UI;
 
-public class FinanceMenu : IClickableMenu
+public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 {
     private readonly LedgerService ledgerService;
     private readonly AnalyticsService analyticsService;
@@ -28,6 +30,14 @@ public class FinanceMenu : IClickableMenu
     private int currentContentHeight = 0;
 
     private List<MarketPriceTableEntry>? marketPriceEntries;
+
+    private readonly Dictionary<string, string> marketPriceSearchTextCache = new(StringComparer.OrdinalIgnoreCase);
+
+    private string marketPriceSearchText = string.Empty;
+
+    private bool marketPriceSearchFocused;
+
+    private Rectangle marketPriceSearchBounds;
 
     private MarketPriceTableEntry? selectedMarketPriceEntry;
 
@@ -57,6 +67,10 @@ public class FinanceMenu : IClickableMenu
 
     private readonly Color chartColor = new Color(92, 63, 34);
 
+    private const int MarketPriceRowHeight = 42;
+
+    private const int MarketPriceRowsStartOffset = 134;
+
     private enum ReportTab
     {
         Daily,
@@ -74,6 +88,8 @@ public class FinanceMenu : IClickableMenu
         DailyMultiplier,
         TotalMultiplier
     }
+
+    public bool Selected { get; set; }
 
     public FinanceMenu(
         LedgerService ledgerService,
@@ -119,6 +135,14 @@ public class FinanceMenu : IClickableMenu
                 return;
             }
 
+            if (this.TryHandleMarketPriceSearchClick(x, y))
+            {
+                if (playSound)
+                    Game1.playSound("smallSelect");
+
+                return;
+            }
+
             if (this.TryHandleMarketPriceHeaderClick(x, y))
             {
                 if (playSound)
@@ -135,6 +159,140 @@ public class FinanceMenu : IClickableMenu
                 return;
             }
         }
+    }
+
+    public override void receiveKeyPress(Keys key)
+    {
+        if (this.currentTab == ReportTab.Market && this.selectedMarketPriceEntry is null && this.marketPriceSearchFocused)
+        {
+            if (key == Keys.Back && this.marketPriceSearchText.Length > 0)
+            {
+                this.marketPriceSearchText = this.marketPriceSearchText[..^1];
+                this.scrollOffset = 0;
+                Game1.playSound("tinyWhip");
+                return;
+            }
+
+            if (key == Keys.Delete && this.marketPriceSearchText.Length > 0)
+            {
+                this.marketPriceSearchText = string.Empty;
+                this.scrollOffset = 0;
+                Game1.playSound("tinyWhip");
+                return;
+            }
+
+            if (IsPotentialMarketPriceSearchKey(key))
+                return;
+        }
+
+        base.receiveKeyPress(key);
+    }
+
+    private static bool IsPotentialMarketPriceSearchKey(Keys key)
+    {
+        if (key >= Keys.A && key <= Keys.Z)
+            return true;
+
+        if (key >= Keys.D0 && key <= Keys.D9)
+            return true;
+
+        if (key >= Keys.NumPad0 && key <= Keys.NumPad9)
+            return true;
+
+        return key is Keys.Space
+            or Keys.OemPeriod
+            or Keys.OemComma
+            or Keys.OemMinus
+            or Keys.OemPlus;
+    }
+
+    public void RecieveTextInput(char inputChar)
+    {
+        if (!this.CanEditMarketPriceSearchText() || char.IsControl(inputChar))
+            return;
+
+        this.marketPriceSearchText += inputChar;
+        this.scrollOffset = 0;
+    }
+
+    public void RecieveTextInput(string text)
+    {
+        if (!this.CanEditMarketPriceSearchText() || string.IsNullOrEmpty(text))
+            return;
+
+        foreach (char c in text)
+        {
+            if (!char.IsControl(c))
+                this.marketPriceSearchText += c;
+        }
+
+        this.scrollOffset = 0;
+    }
+
+    public void RecieveCommandInput(char command)
+    {
+        if (!this.CanEditMarketPriceSearchText())
+            return;
+
+        if (command == '\b' && this.marketPriceSearchText.Length > 0)
+        {
+            this.marketPriceSearchText = this.marketPriceSearchText[..^1];
+            this.scrollOffset = 0;
+            Game1.playSound("tinyWhip");
+        }
+    }
+
+    public void RecieveSpecialInput(Keys key)
+    {
+        if (!this.CanEditMarketPriceSearchText())
+            return;
+
+        if (key == Keys.Back && this.marketPriceSearchText.Length > 0)
+        {
+            this.marketPriceSearchText = this.marketPriceSearchText[..^1];
+            this.scrollOffset = 0;
+            Game1.playSound("tinyWhip");
+            return;
+        }
+
+        if (key == Keys.Delete && this.marketPriceSearchText.Length > 0)
+        {
+            this.marketPriceSearchText = string.Empty;
+            this.scrollOffset = 0;
+            Game1.playSound("tinyWhip");
+            return;
+        }
+
+        if (key == Keys.Escape)
+            this.SetMarketPriceSearchFocused(false);
+    }
+
+    private bool CanEditMarketPriceSearchText()
+    {
+        return this.currentTab == ReportTab.Market
+            && this.selectedMarketPriceEntry is null
+            && this.marketPriceSearchFocused;
+    }
+
+    private void SetMarketPriceSearchFocused(bool focused)
+    {
+        this.marketPriceSearchFocused = focused;
+        this.Selected = focused;
+
+        if (focused)
+        {
+            Game1.keyboardDispatcher.Subscriber = this;
+            return;
+        }
+
+        if (ReferenceEquals(Game1.keyboardDispatcher.Subscriber, this))
+            Game1.keyboardDispatcher.Subscriber = null;
+    }
+
+    protected override void cleanupBeforeExit()
+    {
+        this.SetMarketPriceSearchFocused(false);
+        base.cleanupBeforeExit();
     }
 
     private bool TryHandleReportTabClick(int x, int y, bool playSound)
@@ -158,9 +316,13 @@ public class FinanceMenu : IClickableMenu
         this.currentTab = targetTab.Value;
         this.scrollOffset = 0;
         this.selectedMarketPriceEntry = null;
+        this.SetMarketPriceSearchFocused(false);
 
         if (targetTab.Value == ReportTab.Market)
+        {
             this.marketPriceEntries = null;
+            this.marketPriceSearchTextCache.Clear();
+        }
 
         if (playSound)
             Game1.playSound("smallSelect");
@@ -515,53 +677,92 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         int menuX = Game1.uiViewport.Width / 2 - 400;
         int menuY = Game1.uiViewport.Height / 2 - 300;
         int contentX = menuX + 70;
-        int firstRowY = menuY + 180 - this.scrollOffset + 85;
+        int firstRowY = menuY + 180 - this.scrollOffset + MarketPriceRowsStartOffset;
 
         int relativeY = y - firstRowY;
 
         if (relativeY < 0)
             return false;
 
-        int rowIndex = relativeY / 42;
-        int rowOffset = relativeY % 42;
+        int rowIndex = relativeY / MarketPriceRowHeight;
+        int rowOffset = relativeY % MarketPriceRowHeight;
 
         if (rowOffset > 34)
             return false;
 
-        List<MarketPriceTableEntry> entries = this.GetSortedMarketPriceEntries();
+        List<MarketPriceTableEntry> entries = this.GetVisibleMarketPriceEntries();
 
         if (rowIndex < 0 || rowIndex >= entries.Count)
             return false;
 
         MarketPriceTableEntry entry = entries[rowIndex];
-        int rowLeft = entry.IconItem is not null ? contentX + 44 : contentX;
+        int rowY = firstRowY + rowIndex * MarketPriceRowHeight;
+
+        if (this.GetMarketPriceFavoriteBounds(contentX, rowY).Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
+            this.ledgerService.ToggleFavoriteMarketCommodity(entry.MarketCommodityKey);
+            this.scrollOffset = Math.Clamp(
+                this.scrollOffset,
+                0,
+                this.GetMaxScrollOffset()
+            );
+            return true;
+        }
+
+        int rowLeft = contentX + 24;
         int rowRight = contentX + 690;
 
         if (x < rowLeft || x > rowRight)
             return false;
 
+        this.SetMarketPriceSearchFocused(false);
         this.selectedMarketPriceEntry = entry;
         this.scrollOffset = 0;
 
         return true;
     }
 
+    private bool TryHandleMarketPriceSearchClick(int x, int y)
+    {
+        if (!this.marketPriceSearchBounds.Contains(x, y))
+            return false;
+
+        this.SetMarketPriceSearchFocused(true);
+        return true;
+    }
+
     private bool TryHandleMarketPriceHeaderClick(int x, int y)
     {
         if (this.marketPriceItemHeaderBounds.Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
             return this.SetMarketPriceSort(MarketPriceSortMode.ItemName);
+        }
 
         if (this.marketPriceMarketHeaderBounds.Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
             return this.SetMarketPriceSort(MarketPriceSortMode.MarketPrice);
+        }
 
         if (this.marketPriceBaseHeaderBounds.Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
             return this.SetMarketPriceSort(MarketPriceSortMode.BasePrice);
+        }
 
         if (this.marketPriceDailyMultiplierHeaderBounds.Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
             return this.SetMarketPriceSort(MarketPriceSortMode.DailyMultiplier);
+        }
 
         if (this.marketPriceTotalMultiplierHeaderBounds.Contains(x, y))
+        {
+            this.SetMarketPriceSearchFocused(false);
             return this.SetMarketPriceSort(MarketPriceSortMode.TotalMultiplier);
+        }
 
         return false;
     }
@@ -581,6 +782,35 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.scrollOffset = 0;
 
         return true;
+    }
+
+    private List<MarketPriceTableEntry> GetVisibleMarketPriceEntries()
+    {
+        List<MarketPriceTableEntry> sortedEntries = this.GetSortedMarketPriceEntries();
+        string normalizedSearchText = NormalizeMarketPriceSearchText(this.marketPriceSearchText);
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearchText))
+        {
+            return sortedEntries
+                .Select(entry => new
+                {
+                    Entry = entry,
+                    Rank = this.GetMarketPriceSearchRank(entry, normalizedSearchText)
+                })
+                .Where(match => match.Rank >= 0)
+                .OrderBy(match => match.Rank)
+                .Select(match => match.Entry)
+                .ToList();
+        }
+
+        HashSet<string> favoriteKeys = new(
+            this.ledgerService.GetFavoriteMarketCommodityKeys(),
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        return sortedEntries
+            .OrderByDescending(entry => favoriteKeys.Contains(entry.MarketCommodityKey))
+            .ToList();
     }
 
     private List<MarketPriceTableEntry> GetSortedMarketPriceEntries()
@@ -611,6 +841,124 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         return sorted.ToList();
     }
 
+    private int GetMarketPriceSearchRank(MarketPriceTableEntry entry, string normalizedSearchText)
+    {
+        string itemName = NormalizeMarketPriceSearchText(entry.ItemName);
+        string haystack = this.GetMarketPriceSearchText(entry);
+
+        if (itemName.StartsWith(normalizedSearchText, StringComparison.OrdinalIgnoreCase))
+            return 0;
+
+        if (itemName.Contains(normalizedSearchText, StringComparison.OrdinalIgnoreCase))
+            return 1;
+
+        if (haystack.Contains(normalizedSearchText, StringComparison.OrdinalIgnoreCase))
+            return 2;
+
+        if (IsFuzzyMarketPriceMatch(itemName, normalizedSearchText))
+            return 3;
+
+        if (IsFuzzyMarketPriceMatch(haystack, normalizedSearchText))
+            return 4;
+
+        return -1;
+    }
+
+    private string GetMarketPriceSearchText(MarketPriceTableEntry entry)
+    {
+        string cacheKey = string.IsNullOrWhiteSpace(entry.MarketCommodityKey)
+            ? entry.ItemId
+            : entry.MarketCommodityKey;
+
+        if (this.marketPriceSearchTextCache.TryGetValue(cacheKey, out string? cachedText))
+            return cachedText;
+
+        List<string> searchParts = new()
+        {
+            entry.ItemName,
+            entry.ItemId,
+            entry.MarketCommodityKey,
+            entry.ParentItemId
+        };
+
+        this.AddItemSearchAliases(searchParts, entry.IconItem);
+        this.AddItemSearchAliases(searchParts, entry.ParentItemId);
+
+        string searchText = NormalizeMarketPriceSearchText(string.Join(" ", searchParts));
+        this.marketPriceSearchTextCache[cacheKey] = searchText;
+
+        return searchText;
+    }
+
+    private void AddItemSearchAliases(List<string> searchParts, Item? item)
+    {
+        if (item is null)
+            return;
+
+        searchParts.Add(item.Name);
+        searchParts.Add(item.DisplayName);
+        searchParts.Add(item.QualifiedItemId);
+    }
+
+    private void AddItemSearchAliases(List<string> searchParts, string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return;
+
+        try
+        {
+            this.AddItemSearchAliases(
+                searchParts,
+                ItemRegistry.Create(itemId)
+            );
+        }
+        catch
+        {
+        }
+    }
+
+    private static string NormalizeMarketPriceSearchText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        StringBuilder builder = new();
+
+        foreach (char c in text.Normalize(NormalizationForm.FormKC).ToLowerInvariant())
+        {
+            if (char.IsWhiteSpace(c))
+                continue;
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool IsFuzzyMarketPriceMatch(string haystack, string needle)
+    {
+        if (string.IsNullOrWhiteSpace(needle))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(haystack))
+            return false;
+
+        int needleIndex = 0;
+
+        foreach (char c in haystack)
+        {
+            if (c != needle[needleIndex])
+                continue;
+
+            needleIndex++;
+
+            if (needleIndex >= needle.Length)
+                return true;
+        }
+
+        return false;
+    }
+
     private string GetMarketPriceSortLabel(MarketPriceSortMode mode)
     {
         if (this.marketPriceSortMode != mode)
@@ -631,16 +979,26 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         }
 
         this.DrawLine(b, I18n.Get("market_price.title"), x, y);
-        y += 45;
+        y += 42;
+
+        this.DrawMarketPriceSearchBox(b, x, y);
+        y += 52;
 
         this.DrawMarketPriceHeader(b, x, y);
         y += 40;
 
-        List<MarketPriceTableEntry> entries = this.GetSortedMarketPriceEntries();
+        List<MarketPriceTableEntry> entries = this.GetVisibleMarketPriceEntries();
 
         if (entries.Count == 0)
         {
-            this.DrawLine(b, I18n.Get("market_price.no_items"), x, y);
+            this.DrawLine(
+                b,
+                string.IsNullOrWhiteSpace(this.marketPriceSearchText)
+                    ? I18n.Get("market_price.no_items")
+                    : "No matching market items / 没有匹配的市场物品",
+                x,
+                y
+            );
             y += 35;
             this.UpdateContentHeight(y + 80);
             return;
@@ -928,54 +1286,95 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         return $"{I18n.Get(seasonKey)} {point.Day}";
     }
 
+    private void DrawMarketPriceSearchBox(SpriteBatch b, int x, int y)
+    {
+        this.marketPriceSearchBounds = new Rectangle(x, y - 5, 635, 38);
+
+        Color backgroundColor = string.IsNullOrWhiteSpace(this.marketPriceSearchText)
+            ? Color.White * 0.22f
+            : Color.White * 0.36f;
+
+        b.Draw(Game1.staminaRect, this.marketPriceSearchBounds, backgroundColor);
+        this.DrawRectangleOutline(
+            b,
+            this.marketPriceSearchBounds,
+            2,
+            this.marketPriceSearchFocused ? Color.Goldenrod * 0.95f : Color.Black * 0.55f
+        );
+
+        string text = string.IsNullOrWhiteSpace(this.marketPriceSearchText)
+            ? "Search / 搜索"
+            : this.marketPriceSearchText;
+
+        Color textColor = string.IsNullOrWhiteSpace(this.marketPriceSearchText)
+            ? Game1.textColor * 0.65f
+            : Game1.textColor;
+
+        this.DrawColoredText(
+            b,
+            text,
+            this.marketPriceSearchBounds.X + 14,
+            this.marketPriceSearchBounds.Y + 8,
+            textColor,
+            this.GetBodyTextScale()
+        );
+    }
+
     private void DrawMarketPriceHeader(SpriteBatch b, int x, int y)
     {
-        this.marketPriceItemHeaderBounds = new Rectangle(x + 50, y - 5, 190, 35);
-        this.marketPriceMarketHeaderBounds = new Rectangle(x + 245, y - 5, 115, 35);
-        this.marketPriceBaseHeaderBounds = new Rectangle(x + 360, y - 5, 80, 35);
-        this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(x + 455, y - 5, 120, 35);
-        this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(x + 580, y - 5, 120, 35);
+        this.marketPriceItemHeaderBounds = new Rectangle(x + 78, y - 5, 180, 35);
+        this.marketPriceMarketHeaderBounds = new Rectangle(x + 285, y - 5, 105, 35);
+        this.marketPriceBaseHeaderBounds = new Rectangle(x + 395, y - 5, 80, 35);
+        this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(x + 480, y - 5, 115, 35);
+        this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(x + 600, y - 5, 105, 35);
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_item") + this.GetMarketPriceSortLabel(MarketPriceSortMode.ItemName),
-            x + 50,
+            x + 78,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_market_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.MarketPrice),
-            x + 245,
+            x + 285,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_base_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.BasePrice),
-            x + 360,
+            x + 395,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_daily_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.DailyMultiplier),
-            x + 455,
+            x + 480,
             y
         );
 
         this.DrawLine(
             b,
             I18n.Get("market_price.header_total_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.TotalMultiplier),
-            x + 580,
+            x + 600,
             y
         );
     }
 
     private void DrawMarketPriceLine(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
     {
-        int itemNameX = x;
-        int iconX = x - 20;
+        this.DrawMarketPriceRowTextBackground(b, x, x + 690, y);
+
+        Rectangle favoriteBounds = this.GetMarketPriceFavoriteBounds(x, y);
+        bool isFavorite = this.ledgerService.IsFavoriteMarketCommodity(entry.MarketCommodityKey);
+
+        this.DrawMarketPriceFavoriteMarker(b, favoriteBounds, isFavorite);
+
+        int itemNameX = x + 28;
+        int iconX = x + 24;
 
         if (entry.IconItem is not null)
         {
@@ -992,15 +1391,13 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
                     false
                 );
 
-                itemNameX = x + 50;
+                itemNameX = x + 78;
             }
             catch
             {
-                itemNameX = x;
+                itemNameX = x + 28;
             }
         }
-
-        this.DrawMarketPriceRowTextBackground(b, itemNameX, x + 690, y);
 
         float scale = this.GetBodyTextScale();
 
@@ -1008,16 +1405,16 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.DrawColoredText(
             b,
             this.FormatMarketUnitPrice(entry.MarketUnitPrice),
-            x + 245,
+            x + 285,
             y,
             Game1.textColor,
             scale
         );
-        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 360, y, Game1.textColor, scale);
+        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 395, y, Game1.textColor, scale);
         this.DrawColoredText(
             b,
             this.FormatMultiplierPercent(entry.DailyMultiplier),
-            x + 455,
+            x + 480,
             y,
             this.GetMarketMultiplierColor(entry.DailyMultiplier),
             scale
@@ -1025,11 +1422,39 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.DrawColoredText(
             b,
             this.FormatMultiplierPercent(entry.TotalMultiplier),
-            x + 580,
+            x + 600,
             y,
             this.GetMarketMultiplierColor(entry.TotalMultiplier),
             scale
         );
+    }
+
+    private Rectangle GetMarketPriceFavoriteBounds(int x, int y)
+    {
+        return new Rectangle(x, y + 5, 15, 15);
+    }
+
+    private void DrawMarketPriceFavoriteMarker(SpriteBatch b, Rectangle bounds, bool isFavorite)
+    {
+        if (isFavorite)
+        {
+            b.Draw(Game1.staminaRect, bounds, Color.Goldenrod * 0.95f);
+            this.DrawRectangleOutline(b, bounds, 1, Color.Black * 0.55f);
+            return;
+        }
+
+        this.DrawRectangleOutline(b, bounds, 2, Game1.textColor * 0.65f);
+    }
+
+    private void DrawRectangleOutline(SpriteBatch b, Rectangle bounds, int thickness, Color color)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0 || thickness <= 0)
+            return;
+
+        b.Draw(Game1.staminaRect, new Rectangle(bounds.X, bounds.Y, bounds.Width, thickness), color);
+        b.Draw(Game1.staminaRect, new Rectangle(bounds.X, bounds.Bottom - thickness, bounds.Width, thickness), color);
+        b.Draw(Game1.staminaRect, new Rectangle(bounds.X, bounds.Y, thickness, bounds.Height), color);
+        b.Draw(Game1.staminaRect, new Rectangle(bounds.Right - thickness, bounds.Y, thickness, bounds.Height), color);
     }
 
 

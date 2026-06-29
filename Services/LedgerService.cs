@@ -99,6 +99,55 @@ public class LedgerService
 
         return this.data.HealthInsuranceClaims;
     }
+    public List<string> GetFavoriteMarketCommodityKeys()
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        this.data.FavoriteMarketCommodityKeys ??= new List<string>();
+
+        return this.data.FavoriteMarketCommodityKeys;
+    }
+
+    public bool IsFavoriteMarketCommodity(string marketCommodityKey)
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (string.IsNullOrWhiteSpace(marketCommodityKey))
+            return false;
+
+        this.data.FavoriteMarketCommodityKeys ??= new List<string>();
+
+        return this.data.FavoriteMarketCommodityKeys.Contains(
+            marketCommodityKey,
+            StringComparer.OrdinalIgnoreCase
+        );
+    }
+
+    public void ToggleFavoriteMarketCommodity(string marketCommodityKey)
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (string.IsNullOrWhiteSpace(marketCommodityKey))
+            return;
+
+        this.data.FavoriteMarketCommodityKeys ??= new List<string>();
+
+        int existingIndex = this.data.FavoriteMarketCommodityKeys.FindIndex(key =>
+            string.Equals(
+                key,
+                marketCommodityKey,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (existingIndex >= 0)
+            this.data.FavoriteMarketCommodityKeys.RemoveAt(existingIndex);
+        else
+            this.data.FavoriteMarketCommodityKeys.Add(marketCommodityKey);
+
+        this.Save();
+    }
+
 
     public List<HealthInsuranceClaim> GetPendingHealthInsuranceClaims()
     {
@@ -644,6 +693,7 @@ public class LedgerService
         this.data.BusinessPropertyTaxDailyAssessments.Clear();
         this.data.SignedTaxNoticeIds.Clear();
         this.data.HealthInsuranceClaims.Clear();
+        this.data.FavoriteMarketCommodityKeys.Clear();
         this.data.OutstandingBalance = 0;
         this.ClearSuppressionTokens();
 
@@ -694,6 +744,7 @@ public class LedgerService
         this.data.BusinessPropertyTaxDailyAssessments ??= new List<BusinessPropertyTaxDailyAssessment>();
         this.data.SignedTaxNoticeIds ??= new List<string>();
         this.data.HealthInsuranceClaims ??= new List<HealthInsuranceClaim>();
+        this.data.FavoriteMarketCommodityKeys ??= new List<string>();
     }
 
     private string GetCurrentSaveId()

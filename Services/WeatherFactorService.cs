@@ -39,11 +39,10 @@ public sealed class WeatherFactorService
 
     private double GetSunFactor(string marketCategory)
     {
-        return marketCategory switch
-        {
-            "Fruit" => 0.95,
-            _ => 1.00
-        };
+        // RealityCheck 1.3.3 balance tuning:
+        // Sunny weather is common enough that a recursive daily fruit penalty creates
+        // a persistent downward bias, so sunshine is now neutral.
+        return 1.00;
     }
 
     private double GetRainFactor(string marketCategory)

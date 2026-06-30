@@ -118,6 +118,11 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        TooltipMarketPricePatch.Initialize(
+            this.marketPriceService,
+            this.Monitor
+        );
+
         ShippingSettlementTracePatch.Initialize(
             this.Monitor,
             this.configService
@@ -129,6 +134,7 @@ public class ModEntry : Mod
 
         ShopSalePatch.Apply(harmony);
         ShopSaleMarketPricePatch.Apply(harmony);
+        TooltipMarketPricePatch.Apply(harmony);
         ShippingSettlementTracePatch.Apply(harmony);
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;

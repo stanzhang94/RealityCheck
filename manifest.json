@@ -1,7 +1,7 @@
 {
   "Name": "Reality Check",
   "Author": "Stan",
-  "Version": "1.3.3",
+  "Version": "1.3.4",
   "Description": "Adds weekly taxes, health insurance, financial reports, and a market price system to make farm life a little less consequence-free.",
   "UniqueID": "Stan.RealityCheck",
   "EntryDll": "RealityCheck.dll",

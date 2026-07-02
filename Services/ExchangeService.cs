@@ -114,19 +114,19 @@ public class ExchangeService
 
         if (!Context.IsWorldReady)
         {
-            message = "A save must be loaded before using the exchange.";
+            message = I18n.Get("exchange.error_save_required");
             return false;
         }
 
         if (amount <= 0)
         {
-            message = "Deposit amount must be greater than 0g.";
+            message = I18n.Get("exchange.error_deposit_positive");
             return false;
         }
 
         if (Game1.player.Money < amount)
         {
-            message = $"Not enough farm money. Current farm money: {Game1.player.Money}g.";
+            message = I18n.Get("exchange.error_not_enough_farm_money", new { amount = Game1.player.Money });
             return false;
         }
 
@@ -161,7 +161,7 @@ public class ExchangeService
 
         this.Save();
 
-        message = $"Deposited {amount}g. Exchange cash: {this.data.Account.CashBalance}g, available: {this.data.Account.AvailableBalance}g.";
+        message = I18n.Get("exchange.deposit_success", new { amount, cash = this.data.Account.CashBalance, available = this.data.Account.AvailableBalance });
         return true;
     }
 
@@ -174,19 +174,19 @@ public class ExchangeService
 
         if (!Context.IsWorldReady)
         {
-            message = "A save must be loaded before using the exchange.";
+            message = I18n.Get("exchange.error_save_required");
             return false;
         }
 
         if (amount <= 0)
         {
-            message = "Withdraw amount must be greater than 0g.";
+            message = I18n.Get("exchange.error_withdraw_positive");
             return false;
         }
 
         if (this.data.Account.AvailableBalance < amount)
         {
-            message = $"Not enough exchange available balance. Available: {this.data.Account.AvailableBalance}g.";
+            message = I18n.Get("exchange.error_not_enough_exchange_available", new { amount = this.data.Account.AvailableBalance });
             return false;
         }
 
@@ -221,7 +221,123 @@ public class ExchangeService
 
         this.Save();
 
-        message = $"Withdrew {amount}g. Exchange cash: {this.data.Account.CashBalance}g, available: {this.data.Account.AvailableBalance}g.";
+        message = I18n.Get("exchange.withdraw_success", new { amount, cash = this.data.Account.CashBalance, available = this.data.Account.AvailableBalance });
+        return true;
+    }
+
+
+    public bool TryOpenPosition(
+        ExchangeContractSpec spec,
+        string direction,
+        int termDays,
+        int lots,
+        out ExchangePosition? position,
+        out string message
+    )
+    {
+        this.EnsureLoadedForCurrentSave();
+        position = null;
+
+        if (!Context.IsWorldReady)
+        {
+            message = I18n.Get("exchange.error_save_required");
+            return false;
+        }
+
+        if (spec is null || string.IsNullOrWhiteSpace(spec.MarketCommodityKey))
+        {
+            message = I18n.Get("exchange.error_invalid_contract");
+            return false;
+        }
+
+        if (direction != ExchangePosition.DirectionLong && direction != ExchangePosition.DirectionShort)
+        {
+            message = I18n.Get("exchange.error_invalid_direction");
+            return false;
+        }
+
+        if (lots <= 0)
+        {
+            message = I18n.Get("exchange.error_invalid_lots");
+            return false;
+        }
+
+        if (!spec.SupportsTerm(termDays))
+        {
+            message = I18n.Get("exchange.error_unsupported_term");
+            return false;
+        }
+
+        int totalQuantity = spec.QuantityPerLot * lots;
+        int openPrice = Math.Max(0, spec.MarketUnitPrice);
+        int openNotionalValue = openPrice * totalQuantity;
+        int initialMarginRequired = (int)Math.Ceiling(openNotionalValue * InitialMarginRate);
+        int maintenanceMarginRequired = (int)Math.Ceiling(openNotionalValue * MaintenanceMarginRate);
+
+        if (initialMarginRequired <= 0)
+        {
+            message = I18n.Get("exchange.error_invalid_margin");
+            return false;
+        }
+
+        if (this.data.Account.AvailableBalance < initialMarginRequired)
+        {
+            message = I18n.Get("exchange.error_not_enough_available", new
+            {
+                available = this.data.Account.AvailableBalance,
+                required = initialMarginRequired
+            });
+            return false;
+        }
+
+        string contractId = this.CreateContractId();
+        int openDateIndex = GetCurrentDateIndex();
+
+        position = new ExchangePosition
+        {
+            ContractId = contractId,
+            MarketCommodityKey = spec.MarketCommodityKey,
+            ItemId = spec.ItemId,
+            ParentItemId = spec.ParentItemId,
+            DisplayName = spec.DisplayName,
+            Direction = direction,
+            QuantityPerLot = spec.QuantityPerLot,
+            Lots = lots,
+            TotalQuantity = totalQuantity,
+            TermDays = termDays,
+            OpenPrice = openPrice,
+            LastSettlementPrice = openPrice,
+            CurrentPrice = openPrice,
+            OpenNotionalValue = openNotionalValue,
+            InitialMarginRequired = initialMarginRequired,
+            MaintenanceMarginRequired = maintenanceMarginRequired,
+            PositionMargin = initialMarginRequired,
+            Status = ExchangePosition.StatusOpen,
+            OpenYear = Game1.year,
+            OpenSeason = Game1.currentSeason,
+            OpenDay = Game1.dayOfMonth,
+            OpenDateIndex = openDateIndex,
+            ExpiryDateIndex = openDateIndex + termDays
+        };
+
+        this.data.Account.Positions.Add(position);
+
+        this.AddHistory(
+            "Open Position",
+            $"Open {direction} {spec.DisplayName} x{lots}: margin {initialMarginRequired}g",
+            -initialMarginRequired,
+            contractId
+        );
+
+        this.Save();
+
+        message = I18n.Get("exchange.position_created", new
+        {
+            name = spec.DisplayName,
+            direction = direction == ExchangePosition.DirectionLong ? I18n.Get("exchange.long") : I18n.Get("exchange.short"),
+            lots,
+            margin = initialMarginRequired
+        });
         return true;
     }
 
@@ -316,6 +432,41 @@ public class ExchangeService
     }
 
 
+
+
+    private string CreateContractId()
+    {
+        if (!Context.IsWorldReady)
+            return $"EX-{Guid.NewGuid():N}";
+
+        return $"EX-Y{Game1.year}-{NormalizeSeasonCode(Game1.currentSeason)}-{Game1.dayOfMonth:00}-{this.data.NextContractSerial++:0000}";
+    }
+
+    private static string NormalizeSeasonCode(string season)
+    {
+        return season switch
+        {
+            "spring" => "SP",
+            "summer" => "SU",
+            "fall" => "FA",
+            "winter" => "WI",
+            _ => "??"
+        };
+    }
+
+    private static int GetCurrentDateIndex()
+    {
+        int seasonIndex = Game1.currentSeason switch
+        {
+            "spring" => 0,
+            "summer" => 1,
+            "fall" => 2,
+            "winter" => 3,
+            _ => 0
+        };
+
+        return ((Game1.year - 1) * 112) + (seasonIndex * 28) + Math.Max(1, Game1.dayOfMonth);
+    }
 
     private string CreateTransactionId(string prefix)
     {

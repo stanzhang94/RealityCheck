@@ -19,6 +19,8 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     private readonly AnalyticsService analyticsService;
     private readonly TaxService taxService;
     private readonly MarketPriceService marketPriceService;
+    private readonly ExchangeService? exchangeService;
+    private readonly ExchangeContractCatalogService? exchangeContractCatalogService;
 
     private ReportTab currentTab = ReportTab.Daily;
 
@@ -64,6 +66,7 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     private readonly Rectangle annualTab;
     private readonly Rectangle taxTab;
     private readonly Rectangle marketTab;
+    private readonly Rectangle exchangeButton;
 
     private readonly Color chartColor = new Color(92, 63, 34);
 
@@ -94,13 +97,17 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     public FinanceMenu(
         LedgerService ledgerService,
         AnalyticsService analyticsService,
-        MarketPriceService marketPriceService
+        MarketPriceService marketPriceService,
+        ExchangeService? exchangeService = null,
+        ExchangeContractCatalogService? exchangeContractCatalogService = null
     )
     {
         this.ledgerService = ledgerService;
         this.analyticsService = analyticsService;
         this.taxService = new TaxService(ledgerService);
         this.marketPriceService = marketPriceService;
+        this.exchangeService = exchangeService;
+        this.exchangeContractCatalogService = exchangeContractCatalogService;
 
         int x = Game1.uiViewport.Width / 2 - 400;
         int y = Game1.uiViewport.Height / 2 - 300;
@@ -110,6 +117,7 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         this.annualTab = new Rectangle(x + 280, y + 25, 115, 55);
         this.taxTab = new Rectangle(x + 400, y + 25, 145, 55);
         this.marketTab = new Rectangle(x + 550, y + 25, 190, 55);
+        this.exchangeButton = new Rectangle(x + 575, y + 92, 165, 48);
     }
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -117,6 +125,9 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         base.receiveLeftClick(x, y, playSound);
 
         if (this.TryHandleReportTabClick(x, y, playSound))
+            return;
+
+        if (this.TryHandleExchangeButtonClick(x, y, playSound))
             return;
 
         if (this.currentTab == ReportTab.Market)
@@ -330,6 +341,53 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         return true;
     }
 
+
+    private bool TryHandleExchangeButtonClick(int x, int y, bool playSound)
+    {
+        if (!this.exchangeButton.Contains(x, y))
+            return false;
+
+        if (this.exchangeService is null)
+        {
+            Game1.showRedMessage("Exchange is not available.");
+            return true;
+        }
+
+        this.SetMarketPriceSearchFocused(false);
+        Game1.activeClickableMenu = new ExchangeMenu(
+            this.exchangeService,
+            this.exchangeContractCatalogService
+        );
+
+        if (playSound)
+            Game1.playSound("bigSelect");
+
+        return true;
+    }
+
+    private void DrawExchangeButton(SpriteBatch b)
+    {
+        if (this.exchangeService is null)
+            return;
+
+        IClickableMenu.drawTextureBox(
+            b,
+            this.exchangeButton.X,
+            this.exchangeButton.Y,
+            this.exchangeButton.Width,
+            this.exchangeButton.Height,
+            Color.White
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.button"),
+            Game1.smallFont,
+            new Vector2(this.exchangeButton.X + 24, this.exchangeButton.Y + 12),
+            Game1.textColor
+        );
+    }
+
     public override void receiveScrollWheelAction(int direction)
     {
         if (direction > 0)
@@ -367,6 +425,7 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         );
 
         this.DrawTabs(b);
+        this.DrawExchangeButton(b);
 
         Utility.drawTextWithShadow(
             b,

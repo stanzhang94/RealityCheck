@@ -32,6 +32,8 @@ public class ExchangePosition
 
     public int TotalQuantity { get; set; } = 100;
 
+    public int TermDays { get; set; } = 7;
+
     public int OpenPrice { get; set; } = 0;
 
     public int LastSettlementPrice { get; set; } = 0;

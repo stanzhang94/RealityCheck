@@ -27,6 +27,7 @@ public class ModEntry : Mod
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
     private ExchangeService? exchangeService;
+    private ExchangeContractCatalogService? exchangeContractCatalogService;
 
     public override void Entry(IModHelper helper)
     {
@@ -114,6 +115,12 @@ public class ModEntry : Mod
             this.ledgerService
         );
 
+        this.exchangeContractCatalogService = new ExchangeContractCatalogService(
+            this.marketPriceService,
+            this.ledgerService,
+            this.Monitor
+        );
+
         ShopSalePatch.Initialize(
             this.ledgerService,
             this.artisanIdentityService,
@@ -160,6 +167,12 @@ public class ModEntry : Mod
             "rc_exchange_withdraw",
             "Withdraws available gold from the Reality Check exchange account back to the farm wallet. Usage: rc_exchange_withdraw <amount>",
             this.OnExchangeWithdrawCommand
+        );
+
+        helper.ConsoleCommands.Add(
+            "rc_exchange_catalog",
+            "Shows a preview of tradable Reality Check exchange contracts.",
+            this.OnExchangeCatalogCommand
         );
 
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
@@ -257,6 +270,26 @@ public class ModEntry : Mod
         );
     }
 
+    private void OnExchangeCatalogCommand(
+        string command,
+        string[] args
+    )
+    {
+        if (!Context.IsWorldReady || this.exchangeContractCatalogService is null)
+        {
+            this.Monitor.Log(
+                "Load a save before using exchange commands.",
+                LogLevel.Warn
+            );
+            return;
+        }
+
+        this.Monitor.Log(
+            this.exchangeContractCatalogService.GetDebugSummary(),
+            LogLevel.Info
+        );
+    }
+
     private bool TryParseExchangeAmount(
         string[] args,
         out int amount
@@ -345,7 +378,9 @@ public class ModEntry : Mod
         Game1.activeClickableMenu = new FinanceMenu(
             this.ledgerService,
             this.analyticsService,
-            this.marketPriceService
+            this.marketPriceService,
+            this.exchangeService,
+            this.exchangeContractCatalogService
         );
 
         Game1.playSound("bigSelect");

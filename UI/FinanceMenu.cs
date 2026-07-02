@@ -1989,6 +1989,18 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         int textX = x;
         string displayName = item.ItemName;
 
+        if (this.IsNonItemIncomeSummary(item))
+        {
+            this.DrawLine(
+                b,
+                $"{displayName}   {item.Amount}g",
+                textX,
+                y
+            );
+
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(item.ItemId))
         {
             try
@@ -2020,6 +2032,18 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             $"{displayName}   x{item.Quantity}   {item.Amount}g",
             textX,
             y
+        );
+    }
+
+    private bool IsNonItemIncomeSummary(ItemSummary item)
+    {
+        if (string.IsNullOrWhiteSpace(item.ItemId))
+            return true;
+
+        return string.Equals(
+            item.ItemId,
+            "RC.ExchangeTransfer",
+            StringComparison.OrdinalIgnoreCase
         );
     }
 

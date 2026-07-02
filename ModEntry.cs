@@ -26,6 +26,7 @@ public class ModEntry : Mod
     private MarketCategoryResolver? marketCategoryResolver;
     private TaxEvents taxEvents = null!;
     private TaxNoticeMailRouter? taxNoticeMailRouter;
+    private ExchangeService? exchangeService;
 
     public override void Entry(IModHelper helper)
     {
@@ -107,6 +108,12 @@ public class ModEntry : Mod
             this.Monitor
         );
 
+        this.exchangeService = new ExchangeService(
+            helper,
+            this.Monitor,
+            this.ledgerService
+        );
+
         ShopSalePatch.Initialize(
             this.ledgerService,
             this.artisanIdentityService,
@@ -137,6 +144,24 @@ public class ModEntry : Mod
         TooltipMarketPricePatch.Apply(harmony);
         ShippingSettlementTracePatch.Apply(harmony);
 
+        helper.ConsoleCommands.Add(
+            "rc_exchange_status",
+            "Shows the Reality Check exchange account debug status.",
+            this.OnExchangeStatusCommand
+        );
+
+        helper.ConsoleCommands.Add(
+            "rc_exchange_deposit",
+            "Deposits gold from the farm wallet into the Reality Check exchange account. Usage: rc_exchange_deposit <amount>",
+            this.OnExchangeDepositCommand
+        );
+
+        helper.ConsoleCommands.Add(
+            "rc_exchange_withdraw",
+            "Withdraws available gold from the Reality Check exchange account back to the farm wallet. Usage: rc_exchange_withdraw <amount>",
+            this.OnExchangeWithdrawCommand
+        );
+
         helper.Events.GameLoop.SaveLoaded += this.OnSaveLoaded;
         helper.Events.GameLoop.Saving += this.OnSaving;
 
@@ -153,6 +178,7 @@ public class ModEntry : Mod
 
         helper.Events.GameLoop.DayStarted += this.OnShippingTraceDayStarted;
         helper.Events.GameLoop.DayStarted += this.OnMarketPriceDayStarted;
+        helper.Events.GameLoop.DayStarted += this.OnExchangeDayStarted;
         helper.Events.GameLoop.DayStarted += this.taxEvents.OnDayStarted;
 
         helper.Events.Display.MenuChanged += this.taxNoticeMailRouter.OnMenuChanged;
@@ -164,9 +190,133 @@ public class ModEntry : Mod
         );
     }
 
+
+    private void OnExchangeStatusCommand(
+        string command,
+        string[] args
+    )
+    {
+        if (!Context.IsWorldReady || this.exchangeService is null)
+        {
+            this.Monitor.Log(
+                "Load a save before using exchange commands.",
+                LogLevel.Warn
+            );
+            return;
+        }
+
+        this.Monitor.Log(
+            this.exchangeService.GetDebugStatus(),
+            LogLevel.Info
+        );
+    }
+
+    private void OnExchangeDepositCommand(
+        string command,
+        string[] args
+    )
+    {
+        if (!this.TryParseExchangeAmount(
+            args,
+            out int amount
+        ))
+        {
+            this.Monitor.Log(
+                "Usage: rc_exchange_deposit <amount>",
+                LogLevel.Warn
+            );
+            return;
+        }
+
+        this.RunExchangeTransferCommand(
+            amount,
+            deposit: true
+        );
+    }
+
+    private void OnExchangeWithdrawCommand(
+        string command,
+        string[] args
+    )
+    {
+        if (!this.TryParseExchangeAmount(
+            args,
+            out int amount
+        ))
+        {
+            this.Monitor.Log(
+                "Usage: rc_exchange_withdraw <amount>",
+                LogLevel.Warn
+            );
+            return;
+        }
+
+        this.RunExchangeTransferCommand(
+            amount,
+            deposit: false
+        );
+    }
+
+    private bool TryParseExchangeAmount(
+        string[] args,
+        out int amount
+    )
+    {
+        amount = 0;
+
+        return args.Length == 1
+            && int.TryParse(
+                args[0],
+                out amount
+            )
+            && amount > 0;
+    }
+
+    private void RunExchangeTransferCommand(
+        int amount,
+        bool deposit
+    )
+    {
+        if (!Context.IsWorldReady || this.exchangeService is null)
+        {
+            this.Monitor.Log(
+                "Load a save before using exchange commands.",
+                LogLevel.Warn
+            );
+            return;
+        }
+
+        string message;
+        bool ok;
+
+        if (deposit)
+        {
+            ok = this.exchangeService.TryDeposit(
+                amount,
+                out message
+            );
+        }
+        else
+        {
+            ok = this.exchangeService.TryWithdraw(
+                amount,
+                out message
+            );
+        }
+
+        this.Monitor.Log(
+            message,
+            ok ? LogLevel.Info : LogLevel.Warn
+        );
+
+        if (ok)
+            Game1.showGlobalMessage(message);
+    }
+
     private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
     {
         this.ledgerService?.Load();
+        this.exchangeService?.Load();
         this.marketTrendService?.Load();
         this.marketPriceService?.UpdateAllMarketPricesForToday(this.ledgerService?.GetEntries());
     }
@@ -174,6 +324,7 @@ public class ModEntry : Mod
     private void OnSaving(object? sender, SavingEventArgs e)
     {
         this.ledgerService?.Save();
+        this.exchangeService?.Save();
         this.marketTrendService?.Save();
     }
 
@@ -204,6 +355,12 @@ public class ModEntry : Mod
     private void OnMarketPriceDayStarted(object? sender, DayStartedEventArgs e)
     {
         this.marketPriceService?.UpdateAllMarketPricesForToday(this.ledgerService?.GetEntries());
+    }
+
+
+    private void OnExchangeDayStarted(object? sender, DayStartedEventArgs e)
+    {
+        this.exchangeService?.ProcessDailySettlement();
     }
 
     private void OnShippingTraceDayStarted(object? sender, DayStartedEventArgs e)

@@ -7,4 +7,6 @@ public class ExchangeSaveData
     public ExchangeAccount Account { get; set; } = new();
 
     public int NextContractSerial { get; set; } = 1;
+
+    public int LastSettlementDateIndex { get; set; } = 0;
 }

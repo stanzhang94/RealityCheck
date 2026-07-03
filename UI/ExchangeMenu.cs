@@ -16,7 +16,8 @@ public class ExchangeMenu : IClickableMenu
     private enum ExchangePage
     {
         Account,
-        Create
+        Create,
+        Positions
     }
 
     private enum CommodityFilter
@@ -29,6 +30,8 @@ public class ExchangeMenu : IClickableMenu
 
     private const int CommodityListVisibleRows = 9;
     private const int CommodityListRowHeight = 32;
+    private const int PositionsListVisibleRows = 8;
+    private const int PositionsListRowHeight = 44;
     private const int CreatePagePadding = 18;
     private const int CreatePageSectionGap = 22;
 
@@ -39,6 +42,7 @@ public class ExchangeMenu : IClickableMenu
 
     private readonly Rectangle accountPageButton;
     private readonly Rectangle createPageButton;
+    private readonly Rectangle positionsPageButton;
     private readonly Rectangle closeButton;
 
     private readonly Rectangle transferInputBox;
@@ -75,15 +79,31 @@ public class ExchangeMenu : IClickableMenu
     private string createMessage = string.Empty;
     private bool createMessageSucceeded = true;
     private double createMessageExpiresAt;
+    private string positionsMessage = string.Empty;
+    private bool positionsMessageSucceeded = true;
+    private double positionsMessageExpiresAt;
 
     private int selectedCatalogIndex;
     private int commodityListScrollIndex;
+    private int selectedPositionIndex;
+    private int positionsListScrollIndex;
     private string selectedDirection = ExchangePosition.DirectionLong;
     private int selectedTermDays = 7;
     private int selectedLots = 1;
     private bool confirmCreateOpen;
     private int createPageScrollOffset;
 
+
+    private sealed class PositionsLayout
+    {
+        public Rectangle Viewport { get; init; }
+        public Rectangle ListBounds { get; init; }
+        public Rectangle UpButton { get; init; }
+        public Rectangle DownButton { get; init; }
+        public Rectangle DetailBounds { get; init; }
+        public Rectangle TopUpButton { get; init; }
+        public Rectangle ClosePositionButton { get; init; }
+    }
 
     private sealed class CreateLayout
     {
@@ -138,8 +158,9 @@ public class ExchangeMenu : IClickableMenu
         this.filteredCatalogs = this.BuildFilteredCatalogCache(this.catalog);
 
         int tabY = this.yPositionOnScreen + 105;
-        this.accountPageButton = new Rectangle(this.xPositionOnScreen + 60, tabY, 160, 48);
-        this.createPageButton = new Rectangle(this.xPositionOnScreen + 235, tabY, 170, 48);
+        this.accountPageButton = new Rectangle(this.xPositionOnScreen + 60, tabY, 140, 48);
+        this.createPageButton = new Rectangle(this.accountPageButton.Right + 14, tabY, 140, 48);
+        this.positionsPageButton = new Rectangle(this.createPageButton.Right + 14, tabY, 160, 48);
         this.closeButton = new Rectangle(this.xPositionOnScreen + this.width - 92, this.yPositionOnScreen + 38, 48, 48);
 
         int transferX = this.xPositionOnScreen + this.width - 390;
@@ -229,9 +250,25 @@ public class ExchangeMenu : IClickableMenu
             return;
         }
 
+        if (this.positionsPageButton.Contains(x, y))
+        {
+            this.currentPage = ExchangePage.Positions;
+            this.transferInputSelected = false;
+            this.ClampSelectedPositionIndex();
+            Game1.playSound("smallSelect");
+            return;
+        }
+
         if (this.currentPage == ExchangePage.Account)
         {
             this.HandleAccountClick(x, y);
+            return;
+        }
+
+        if (this.currentPage == ExchangePage.Positions)
+        {
+            this.transferInputSelected = false;
+            this.HandlePositionsClick(x, y);
             return;
         }
 
@@ -267,6 +304,22 @@ public class ExchangeMenu : IClickableMenu
                 this.ClampCreatePageScroll(layout);
                 return;
             }
+        }
+
+        if (this.currentPage == ExchangePage.Positions)
+        {
+            PositionsLayout layout = this.GetPositionsLayout();
+            int count = this.GetSortedPositions().Count;
+            int visibleRows = this.GetPositionsVisibleRows(layout);
+            int maxScroll = Math.Max(0, count - visibleRows);
+            if (maxScroll > 0)
+            {
+                this.positionsListScrollIndex += direction < 0 ? 1 : -1;
+                this.ClampPositionsListScrollIndex(count);
+                Game1.playSound("shiny4");
+            }
+
+            return;
         }
 
         base.receiveScrollWheelAction(direction);
@@ -397,6 +450,68 @@ public class ExchangeMenu : IClickableMenu
     }
 
 
+
+    private void HandlePositionsClick(int x, int y)
+    {
+        PositionsLayout layout = this.GetPositionsLayout();
+        List<ExchangePosition> positions = this.GetSortedPositions();
+        if (positions.Count == 0)
+            return;
+
+        this.ClampSelectedPositionIndex(positions.Count);
+
+        ExchangePosition selectedPosition = positions[this.selectedPositionIndex];
+        int requiredTopUp = this.exchangeService.GetRequiredMarginTopUp(selectedPosition);
+        bool selectedPositionIsMarginCall = string.Equals(
+            selectedPosition.Status,
+            ExchangePosition.StatusMarginCall,
+            StringComparison.OrdinalIgnoreCase
+        );
+        if (layout.TopUpButton.Contains(x, y) && selectedPositionIsMarginCall && requiredTopUp > 0)
+        {
+            bool success = this.exchangeService.TryTopUpMargin(selectedPosition.ContractId, out string message);
+            this.SetPositionsMessage(message, success);
+            Game1.playSound(success ? "coin" : "cancel");
+            return;
+        }
+
+        if (layout.ClosePositionButton.Contains(x, y) && this.CanClosePositionForUi(selectedPosition))
+        {
+            bool success = this.exchangeService.TryClosePosition(selectedPosition.ContractId, out string message);
+            this.SetPositionsMessage(message, success);
+            Game1.playSound(success ? "coin" : "cancel");
+            return;
+        }
+
+        if (layout.UpButton.Contains(x, y))
+        {
+            this.positionsListScrollIndex--;
+            this.ClampPositionsListScrollIndex(positions.Count);
+            Game1.playSound("shiny4");
+            return;
+        }
+
+        if (layout.DownButton.Contains(x, y))
+        {
+            this.positionsListScrollIndex++;
+            this.ClampPositionsListScrollIndex(positions.Count);
+            Game1.playSound("shiny4");
+            return;
+        }
+
+        if (layout.ListBounds.Contains(x, y))
+        {
+            int row = (y - layout.ListBounds.Y) / PositionsListRowHeight;
+            int index = this.positionsListScrollIndex + row;
+            if (index >= 0 && index < positions.Count)
+            {
+                this.selectedPositionIndex = index;
+                this.EnsurePositionSelectionVisible(positions.Count);
+                Game1.playSound("smallSelect");
+            }
+        }
+    }
+
     private bool HandleFilterClick(int x, int y, CreateLayout? layout = null)
     {
         layout ??= this.GetCreateLayout();
@@ -515,6 +630,10 @@ public class ExchangeMenu : IClickableMenu
             this.DrawAccountSummary(b);
             this.DrawTransferPanel(b);
         }
+        else if (this.currentPage == ExchangePage.Positions)
+        {
+            this.DrawPositionsPage(b);
+        }
         else
         {
             this.DrawCreateContractPage(b);
@@ -542,6 +661,13 @@ public class ExchangeMenu : IClickableMenu
             this.createPageButton,
             this.currentPage == ExchangePage.Create ? I18n.Get("exchange.tab_create_active") : I18n.Get("exchange.tab_create"),
             selected: this.currentPage == ExchangePage.Create
+        );
+
+        this.DrawButton(
+            b,
+            this.positionsPageButton,
+            this.currentPage == ExchangePage.Positions ? I18n.Get("exchange.tab_positions_active") : I18n.Get("exchange.tab_positions"),
+            selected: this.currentPage == ExchangePage.Positions
         );
     }
 
@@ -574,6 +700,52 @@ public class ExchangeMenu : IClickableMenu
         {
             y += 38;
             this.DrawLine(b, I18n.Get("exchange.debt", new { amount = account.Debt }), x, y, Color.Red);
+        }
+
+        this.DrawAccountHistory(b, account, x, this.yPositionOnScreen + 382);
+    }
+
+    private void DrawAccountHistory(SpriteBatch b, ExchangeAccount account, int x, int y)
+    {
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.account_history_title"),
+            Game1.smallFont,
+            new Vector2(x, y),
+            Game1.textColor
+        );
+
+        y += 34;
+        List<ExchangeAccountHistoryEntry> entries = account.AccountHistory
+            .AsEnumerable()
+            .Reverse()
+            .Take(10)
+            .ToList();
+
+        if (entries.Count == 0)
+        {
+            this.DrawLine(b, I18n.Get("exchange.account_history_empty"), x, y, Game1.textColor * 0.65f);
+            return;
+        }
+
+        int maxWidth = Math.Max(360, this.transferInputBox.X - x - 40);
+        foreach (ExchangeAccountHistoryEntry entry in entries)
+        {
+            string date = entry.Year > 0
+                ? I18n.Date(entry.Year, entry.Season, entry.Day)
+                : string.Empty;
+            string line = string.IsNullOrWhiteSpace(date)
+                ? entry.Description
+                : $"{date}  {entry.Description}";
+
+            this.DrawLine(
+                b,
+                this.TrimToWidth(line, maxWidth),
+                x,
+                y,
+                entry.Amount < 0 ? Color.Red : Game1.textColor * 0.76f
+            );
+            y += 28;
         }
     }
 
@@ -627,6 +799,205 @@ public class ExchangeMenu : IClickableMenu
             new Vector2(this.transferInputBox.X + 14, this.transferInputBox.Y + 8),
             textColor
         );
+    }
+
+
+    private void DrawPositionsPage(SpriteBatch b)
+    {
+        PositionsLayout layout = this.GetPositionsLayout();
+        List<ExchangePosition> positions = this.GetSortedPositions();
+
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.positions_title"),
+            Game1.smallFont,
+            new Vector2(layout.Viewport.X + 18, layout.Viewport.Y + 14),
+            Game1.textColor
+        );
+
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.positions_count", new { count = positions.Count }),
+            Game1.smallFont,
+            new Vector2(layout.DetailBounds.X, layout.Viewport.Y + 14),
+            Game1.textColor * 0.78f
+        );
+
+        if (positions.Count == 0)
+        {
+            Utility.drawTextWithShadow(
+                b,
+                I18n.Get("exchange.positions_empty"),
+                Game1.smallFont,
+                new Vector2(layout.Viewport.X + 18, layout.Viewport.Y + 86),
+                Game1.textColor * 0.78f
+            );
+            return;
+        }
+
+        this.ClampSelectedPositionIndex(positions.Count, ensureVisible: false);
+        this.ClampPositionsListScrollIndex(positions.Count);
+        this.DrawPositionsList(b, positions, layout);
+        this.DrawSelectedPositionDetails(b, positions[this.selectedPositionIndex], layout);
+    }
+
+    private void DrawPositionsList(SpriteBatch b, List<ExchangePosition> positions, PositionsLayout layout)
+    {
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.positions_list_header"),
+            Game1.smallFont,
+            new Vector2(layout.ListBounds.X, layout.ListBounds.Y - 34),
+            Game1.textColor
+        );
+
+        int visibleRows = this.GetPositionsVisibleRows(layout);
+        b.Draw(Game1.staminaRect, layout.ListBounds, Color.White * 0.10f);
+        this.DrawRectangleOutline(b, layout.ListBounds, 1, Color.Black * 0.24f);
+
+        int maxVisible = Math.Min(visibleRows, positions.Count - this.positionsListScrollIndex);
+        for (int row = 0; row < maxVisible; row++)
+        {
+            int index = this.positionsListScrollIndex + row;
+            ExchangePosition position = positions[index];
+            Rectangle rowBounds = new(
+                layout.ListBounds.X + 4,
+                layout.ListBounds.Y + row * PositionsListRowHeight + 3,
+                layout.ListBounds.Width - 24,
+                PositionsListRowHeight - 6
+            );
+
+            if (index == this.selectedPositionIndex)
+            {
+                b.Draw(Game1.staminaRect, rowBounds, Color.Wheat * 0.55f);
+                this.DrawRectangleOutline(b, rowBounds, 1, Color.SaddleBrown * 0.35f);
+            }
+
+            string title = I18n.Get("exchange.positions_row_title", new
+            {
+                name = position.DisplayName,
+                direction = this.FormatDirection(position.Direction),
+                lots = position.Lots
+            });
+            int daysLeft = this.GetDaysLeft(position);
+            string meta = I18n.Get("exchange.positions_row_status", new
+            {
+                days = daysLeft,
+                status = this.FormatPositionLifecycleStatus(position, daysLeft)
+            });
+
+            Vector2 metaSize = Game1.smallFont.MeasureString(meta);
+            int metaX = rowBounds.Right - 8 - (int)metaSize.X;
+            int textY = rowBounds.Y + Math.Max(0, (rowBounds.Height - (int)Game1.smallFont.MeasureString("Ag").Y) / 2);
+            int titleMaxWidth = Math.Max(110, metaX - rowBounds.X - 18);
+
+            Utility.drawTextWithShadow(
+                b,
+                this.TrimToWidth(title, titleMaxWidth),
+                Game1.smallFont,
+                new Vector2(rowBounds.X + 8, textY),
+                Game1.textColor
+            );
+            Utility.drawTextWithShadow(
+                b,
+                this.TrimToWidth(meta, Math.Max(90, rowBounds.Right - (rowBounds.X + titleMaxWidth + 22))),
+                Game1.smallFont,
+                new Vector2(Math.Max(rowBounds.X + titleMaxWidth + 18, metaX), textY),
+                Game1.textColor * 0.68f
+            );
+        }
+
+        int maxScroll = Math.Max(0, positions.Count - visibleRows);
+        if (maxScroll > 0)
+        {
+            this.DrawButton(b, layout.UpButton, "▲");
+            this.DrawButton(b, layout.DownButton, "▼");
+
+            Rectangle track = new(layout.ListBounds.Right - 12, layout.ListBounds.Y + 34, 5, layout.ListBounds.Height - 68);
+            b.Draw(Game1.staminaRect, track, Color.Black * 0.12f);
+            int thumbHeight = Math.Max(28, (int)(track.Height * (visibleRows / (float)positions.Count)));
+            int thumbY = track.Y + (int)((track.Height - thumbHeight) * (this.positionsListScrollIndex / (float)maxScroll));
+            b.Draw(Game1.staminaRect, new Rectangle(track.X, thumbY, track.Width, thumbHeight), Color.SaddleBrown * 0.45f);
+        }
+    }
+
+    private void DrawSelectedPositionDetails(SpriteBatch b, ExchangePosition position, PositionsLayout layout)
+    {
+        int currentPrice = this.GetPositionDisplayPrice(position);
+        int unrealized = this.CalculateUnrealizedProfit(position, currentPrice);
+        int currentValue = currentPrice * Math.Max(0, position.TotalQuantity);
+        int daysLeft = this.GetDaysLeft(position);
+
+        int detailX = layout.DetailBounds.X;
+        int detailY = layout.DetailBounds.Y;
+        int columnGap = 56;
+        int columnWidth = Math.Max(260, (layout.DetailBounds.Width - columnGap) / 2);
+        int leftLabelX = detailX;
+        int leftValueX = detailX + Math.Min(180, Math.Max(138, columnWidth / 2));
+        int rightLabelX = detailX + columnWidth + columnGap;
+        int rightValueX = rightLabelX + Math.Min(180, Math.Max(138, columnWidth / 2));
+        const int rowHeight = 30;
+
+        Utility.drawTextWithShadow(
+            b,
+            position.DisplayName,
+            Game1.smallFont,
+            new Vector2(detailX, detailY - 10),
+            Game1.textColor
+        );
+
+        int leftY = detailY + 34;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_id"), position.ContractId, leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_status"), this.FormatPositionLifecycleStatus(position, daysLeft), leftLabelX, leftValueX, leftY, this.GetPositionStatusColor(position, daysLeft));
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.confirm_direction"), this.FormatDirection(position.Direction), leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.confirm_term"), I18n.Get("exchange.value_days", new { days = position.TermDays }), leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.create_lots_label"), position.Lots.ToString(), leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.label_total_quantity"), position.TotalQuantity.ToString(), leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_open_price"), I18n.Get("exchange.value_gold", new { amount = position.OpenPrice }), leftLabelX, leftValueX, leftY);
+        leftY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_current_price"), I18n.Get("exchange.value_gold", new { amount = currentPrice }), leftLabelX, leftValueX, leftY);
+
+        int rightY = detailY + 34;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_unrealized"), I18n.Get("exchange.value_signed_gold", new { amount = unrealized }), rightLabelX, rightValueX, rightY, unrealized < 0 ? Color.Red : Game1.textColor);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_current_value"), I18n.Get("exchange.value_gold", new { amount = currentValue }), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.label_initial_margin"), I18n.Get("exchange.value_gold", new { amount = position.InitialMarginRequired }), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.label_maintenance_margin"), I18n.Get("exchange.value_gold", new { amount = position.MaintenanceMarginRequired }), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_margin"), I18n.Get("exchange.value_gold", new { amount = position.PositionMargin }), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_open_date"), I18n.Date(position.OpenYear, position.OpenSeason, position.OpenDay), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.label_expiry"), this.FormatDateIndex(position.ExpiryDateIndex), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        this.DrawLabelValue(b, I18n.Get("exchange.position_days_left"), I18n.Get("exchange.value_days", new { days = daysLeft }), rightLabelX, rightValueX, rightY);
+
+        int requiredTopUp = this.exchangeService.GetRequiredMarginTopUp(position);
+        bool isMarginCall = string.Equals(position.Status, ExchangePosition.StatusMarginCall, StringComparison.OrdinalIgnoreCase);
+        if (position.IsOpenLike() && isMarginCall && requiredTopUp > 0)
+        {
+            int noticeY = layout.TopUpButton.Y - 32;
+            Utility.drawTextWithShadow(
+                b,
+                I18n.Get("exchange.margin_topup_required", new { amount = requiredTopUp }),
+                Game1.smallFont,
+                new Vector2(layout.TopUpButton.X, noticeY),
+                Color.OrangeRed
+            );
+
+            this.DrawButton(b, layout.TopUpButton, I18n.Get("exchange.margin_topup_button"), selected: true, enabled: true);
+        }
+
+        if (this.CanClosePositionForUi(position))
+            this.DrawButton(b, layout.ClosePositionButton, I18n.Get("exchange.close_position_button"), selected: false, enabled: true);
     }
 
     private void DrawCreateContractPage(SpriteBatch b)
@@ -901,25 +1272,41 @@ public class ExchangeMenu : IClickableMenu
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(this.createMessage))
+        if (this.currentPage == ExchangePage.Create)
+        {
+            if (string.IsNullOrWhiteSpace(this.createMessage))
+                return;
+
+            CreateLayout layout = this.GetCreateLayout();
+            Rectangle messageBounds = new(
+                Math.Max(layout.Viewport.X + 20, layout.Viewport.Right - 430),
+                layout.CreateButton.Bottom + 12,
+                400,
+                62
+            );
+            if (!this.IsPartiallyVisible(messageBounds, layout.Viewport))
+                return;
+
+            this.DrawWrappedTextRightAligned(
+                b,
+                this.createMessage,
+                messageBounds,
+                this.createMessageSucceeded ? Game1.textColor : Color.Red,
+                layout.Viewport
+            );
+            return;
+        }
+
+        if (this.currentPage != ExchangePage.Positions || string.IsNullOrWhiteSpace(this.positionsMessage))
             return;
 
-        CreateLayout layout = this.GetCreateLayout();
-        Rectangle messageBounds = new(
-            Math.Max(layout.Viewport.X + 20, layout.Viewport.Right - 430),
-            layout.CreateButton.Bottom + 12,
-            400,
-            62
-        );
-        if (!this.IsPartiallyVisible(messageBounds, layout.Viewport))
-            return;
-
-        this.DrawWrappedTextRightAligned(
+        PositionsLayout positionsLayout = this.GetPositionsLayout();
+        Utility.drawTextWithShadow(
             b,
-            this.createMessage,
-            messageBounds,
-            this.createMessageSucceeded ? Game1.textColor : Color.Red,
-            layout.Viewport
+            this.positionsMessage,
+            Game1.smallFont,
+            new Vector2(positionsLayout.DetailBounds.X, positionsLayout.DetailBounds.Bottom + 14),
+            this.positionsMessageSucceeded ? Game1.textColor : Color.Red
         );
     }
 
@@ -937,6 +1324,13 @@ public class ExchangeMenu : IClickableMenu
         this.createMessageExpiresAt = this.GetUiTimeMilliseconds() + (succeeded ? 2600 : 3800);
     }
 
+    private void SetPositionsMessage(string message, bool succeeded)
+    {
+        this.positionsMessage = message;
+        this.positionsMessageSucceeded = succeeded;
+        this.positionsMessageExpiresAt = this.GetUiTimeMilliseconds() + (succeeded ? 2600 : 4200);
+    }
+
     private void ExpireMessages()
     {
         double now = this.GetUiTimeMilliseconds();
@@ -945,6 +1339,9 @@ public class ExchangeMenu : IClickableMenu
 
         if (!string.IsNullOrWhiteSpace(this.createMessage) && now >= this.createMessageExpiresAt)
             this.createMessage = string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(this.positionsMessage) && now >= this.positionsMessageExpiresAt)
+            this.positionsMessage = string.Empty;
     }
 
     private double GetUiTimeMilliseconds()
@@ -1043,12 +1440,17 @@ public class ExchangeMenu : IClickableMenu
             ? this.exchangeService.TryDeposit(amount, out message)
             : this.exchangeService.TryWithdraw(amount, out message);
 
-        this.SetAccountMessage(message, ok);
         if (ok)
         {
+            this.accountMessage = string.Empty;
             this.transferAmountText = string.Empty;
             this.transferInputSelected = false;
         }
+        else
+        {
+            this.SetAccountMessage(message, succeeded: false);
+        }
+
         Game1.playSound(ok ? "coin" : "cancel");
     }
 
@@ -1330,6 +1732,277 @@ public class ExchangeMenu : IClickableMenu
                 );
             }
         }
+    }
+
+
+    private PositionsLayout GetPositionsLayout()
+    {
+        Rectangle viewport = new(
+            this.xPositionOnScreen + 58,
+            this.yPositionOnScreen + 166,
+            this.width - 116,
+            this.height - 218
+        );
+
+        int listX = viewport.X + 18;
+        int listY = viewport.Y + 86;
+        int listWidth = Math.Min(430, Math.Max(340, (viewport.Width - 86) / 3));
+        int listHeight = Math.Max(PositionsListRowHeight * 5, viewport.Bottom - listY - 22);
+        listHeight = Math.Min(listHeight, PositionsListRowHeight * 10);
+        Rectangle listBounds = new(listX, listY, listWidth, listHeight);
+        Rectangle upButton = new(listBounds.Right - 34, listBounds.Y + 2, 30, 26);
+        Rectangle downButton = new(listBounds.Right - 34, listBounds.Bottom - 28, 30, 26);
+
+        int detailX = listBounds.Right + 46;
+        Rectangle detailBounds = new(
+            detailX,
+            listY,
+            Math.Max(560, viewport.Right - detailX - 24),
+            listBounds.Height
+        );
+        Rectangle topUpButton = new(detailBounds.X, detailBounds.Bottom - 48, 180, 42);
+        Rectangle closePositionButton = new(topUpButton.Right + 18, detailBounds.Bottom - 48, 150, 42);
+
+        return new PositionsLayout
+        {
+            Viewport = viewport,
+            ListBounds = listBounds,
+            UpButton = upButton,
+            DownButton = downButton,
+            DetailBounds = detailBounds,
+            TopUpButton = topUpButton,
+            ClosePositionButton = closePositionButton
+        };
+    }
+
+    private int GetPositionsVisibleRows(PositionsLayout layout)
+    {
+        return Math.Max(1, layout.ListBounds.Height / PositionsListRowHeight);
+    }
+
+    private void ClampSelectedPositionIndex()
+    {
+        this.ClampSelectedPositionIndex(this.exchangeService.GetPositions().Count, ensureVisible: true);
+    }
+
+    private void ClampSelectedPositionIndex(int count, bool ensureVisible = true)
+    {
+        if (count <= 0)
+        {
+            this.selectedPositionIndex = 0;
+            this.positionsListScrollIndex = 0;
+            return;
+        }
+
+        this.selectedPositionIndex = Math.Clamp(this.selectedPositionIndex, 0, count - 1);
+        if (ensureVisible)
+            this.EnsurePositionSelectionVisible(count);
+        this.ClampPositionsListScrollIndex(count);
+    }
+
+    private void EnsurePositionSelectionVisible(int count)
+    {
+        if (count <= 0)
+        {
+            this.positionsListScrollIndex = 0;
+            return;
+        }
+
+        PositionsLayout layout = this.GetPositionsLayout();
+        int visibleRows = this.GetPositionsVisibleRows(layout);
+        int maxScroll = Math.Max(0, count - visibleRows);
+        if (this.selectedPositionIndex < this.positionsListScrollIndex)
+            this.positionsListScrollIndex = this.selectedPositionIndex;
+        else if (this.selectedPositionIndex >= this.positionsListScrollIndex + visibleRows)
+            this.positionsListScrollIndex = this.selectedPositionIndex - visibleRows + 1;
+
+        this.positionsListScrollIndex = Math.Clamp(this.positionsListScrollIndex, 0, maxScroll);
+    }
+
+    private void ClampPositionsListScrollIndex(int count)
+    {
+        PositionsLayout layout = this.GetPositionsLayout();
+        int visibleRows = this.GetPositionsVisibleRows(layout);
+        int maxScroll = Math.Max(0, count - visibleRows);
+        this.positionsListScrollIndex = Math.Clamp(this.positionsListScrollIndex, 0, maxScroll);
+    }
+
+    private List<ExchangePosition> GetSortedPositions()
+    {
+        return this.exchangeService.GetPositions()
+            .OrderBy(position => this.GetPositionSortPriority(position))
+            .ThenBy(position => Math.Max(0, position.ExpiryDateIndex))
+            .ThenBy(position => Math.Max(0, position.OpenDateIndex))
+            .ThenBy(position => position.ContractId)
+            .ToList();
+    }
+
+    private int GetPositionSortPriority(ExchangePosition position)
+    {
+        int daysLeft = this.GetDaysLeft(position);
+
+        if (string.Equals(position.Status, ExchangePosition.StatusMarginCall, StringComparison.OrdinalIgnoreCase))
+            return 10;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase)
+            || (position.IsOpenLike() && daysLeft <= 0))
+            return 20;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusOpen, StringComparison.OrdinalIgnoreCase))
+            return 30;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusForcedLiquidated, StringComparison.OrdinalIgnoreCase))
+            return 40;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusClosed, StringComparison.OrdinalIgnoreCase))
+            return 50;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusDeliveryDefault, StringComparison.OrdinalIgnoreCase))
+            return 80;
+
+        if (string.Equals(position.Status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase))
+            return 90;
+
+        return 70;
+    }
+
+    private bool CanClosePositionForUi(ExchangePosition position)
+    {
+        if (position is null || !position.IsOpenLike())
+            return false;
+
+        return this.GetDaysLeft(position) > 0;
+    }
+
+    private int GetPositionDisplayPrice(ExchangePosition position)
+    {
+        ExchangeContractSpec? currentSpec = this.catalog.FirstOrDefault(spec => string.Equals(spec.MarketCommodityKey, position.MarketCommodityKey, StringComparison.OrdinalIgnoreCase));
+        if (currentSpec is not null && currentSpec.MarketUnitPrice > 0)
+            return currentSpec.MarketUnitPrice;
+
+        if (position.CurrentPrice > 0)
+            return position.CurrentPrice;
+
+        return position.LastSettlementPrice > 0 ? position.LastSettlementPrice : position.OpenPrice;
+    }
+
+    private int CalculateUnrealizedProfit(ExchangePosition position, int currentPrice)
+    {
+        int delta = currentPrice - position.OpenPrice;
+        if (string.Equals(position.Direction, ExchangePosition.DirectionShort, StringComparison.OrdinalIgnoreCase))
+            delta = -delta;
+
+        return delta * Math.Max(0, position.TotalQuantity);
+    }
+
+    private string FormatDirection(string direction)
+    {
+        return string.Equals(direction, ExchangePosition.DirectionShort, StringComparison.OrdinalIgnoreCase)
+            ? I18n.Get("exchange.short")
+            : I18n.Get("exchange.long");
+    }
+
+    private int GetDaysLeft(ExchangePosition position)
+    {
+        if (position is null || position.ExpiryDateIndex <= 0)
+            return 0;
+
+        return Math.Max(0, position.ExpiryDateIndex - GetCurrentDateIndexForUi());
+    }
+
+    private string FormatPositionLifecycleStatus(ExchangePosition position, int daysLeft)
+    {
+        if (string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_pending_delivery");
+
+        if (position.IsOpenLike() && daysLeft <= 0)
+            return I18n.Get("exchange.status_pending_delivery");
+
+        return this.FormatPositionStatus(position.Status);
+    }
+
+    private string FormatPositionStatus(string status)
+    {
+        if (string.Equals(status, ExchangePosition.StatusMarginCall, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_margin_call");
+        if (string.Equals(status, ExchangePosition.StatusClosed, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_closed");
+        if (string.Equals(status, ExchangePosition.StatusForcedLiquidated, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_forced_liquidated");
+        if (string.Equals(status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_pending_delivery");
+        if (string.Equals(status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_delivered");
+        if (string.Equals(status, ExchangePosition.StatusDeliveryDefault, StringComparison.OrdinalIgnoreCase))
+            return I18n.Get("exchange.status_delivery_default");
+
+        return I18n.Get("exchange.status_open");
+    }
+
+    private Color GetPositionStatusColor(ExchangePosition position, int daysLeft)
+    {
+        if (string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase)
+            || (position.IsOpenLike() && daysLeft <= 0))
+            return Color.Orange;
+
+        return this.GetStatusColor(position.Status);
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        if (string.Equals(status, ExchangePosition.StatusMarginCall, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase))
+            return Color.Orange;
+        if (string.Equals(status, ExchangePosition.StatusForcedLiquidated, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, ExchangePosition.StatusDeliveryDefault, StringComparison.OrdinalIgnoreCase))
+            return Color.Red;
+        if (string.Equals(status, ExchangePosition.StatusClosed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase))
+            return Game1.textColor * 0.65f;
+
+        return Game1.textColor;
+    }
+
+    private string FormatDateIndex(int dateIndex)
+    {
+        if (dateIndex <= 0)
+            return "-";
+
+        string[] seasons = { "spring", "summer", "fall", "winter" };
+        int zeroBased = Math.Max(0, dateIndex - 1);
+        int year = zeroBased / 112 + 1;
+        int dayOfYear = zeroBased % 112;
+        string season = seasons[Math.Clamp(dayOfYear / 28, 0, seasons.Length - 1)];
+        int day = dayOfYear % 28 + 1;
+
+        return I18n.Date(year, season, day);
+    }
+
+    private static int GetCurrentDateIndexForUi()
+    {
+        int seasonIndex = Game1.currentSeason switch
+        {
+            "spring" => 0,
+            "summer" => 1,
+            "fall" => 2,
+            "winter" => 3,
+            _ => 0
+        };
+
+        return ((Game1.year - 1) * 112) + (seasonIndex * 28) + Math.Max(1, Game1.dayOfMonth);
+    }
+
+    private string TrimToWidth(string text, int maxWidth)
+    {
+        if (Game1.smallFont.MeasureString(text).X <= maxWidth)
+            return text;
+
+        string suffix = "…";
+        string candidate = text;
+        while (candidate.Length > 0 && Game1.smallFont.MeasureString(candidate + suffix).X > maxWidth)
+            candidate = candidate[..^1];
+
+        return string.IsNullOrEmpty(candidate) ? suffix : candidate + suffix;
     }
 
     private CreateLayout GetCreateLayout()

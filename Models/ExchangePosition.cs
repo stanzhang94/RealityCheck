@@ -11,6 +11,7 @@ public class ExchangePosition
     public const string StatusMarginCall = "MarginCall";
     public const string StatusClosed = "Closed";
     public const string StatusForcedLiquidated = "ForcedLiquidated";
+    public const string StatusPendingDelivery = "PendingDelivery";
     public const string StatusDelivered = "Delivered";
     public const string StatusDeliveryDefault = "DeliveryDefault";
 
@@ -47,6 +48,16 @@ public class ExchangePosition
     public int MaintenanceMarginRequired { get; set; } = 0;
 
     public int PositionMargin { get; set; } = 0;
+
+    public int MarginCallDateIndex { get; set; } = 0;
+
+    public int MarginCallRequiredTopUp { get; set; } = 0;
+
+    public int ForcedLiquidationDateIndex { get; set; } = 0;
+
+    public int ForcedLiquidationPrice { get; set; } = 0;
+
+    public string LastRiskMessage { get; set; } = string.Empty;
 
     public string Status { get; set; } = StatusOpen;
 

@@ -112,7 +112,8 @@ public class ModEntry : Mod
         this.exchangeService = new ExchangeService(
             helper,
             this.Monitor,
-            this.ledgerService
+            this.ledgerService,
+            this.marketPriceService
         );
 
         this.exchangeContractCatalogService = new ExchangeContractCatalogService(

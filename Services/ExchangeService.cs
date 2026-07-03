@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using RealityCheck.Data;
 using RealityCheck.Models;
 using StardewModdingAPI;
@@ -17,11 +18,26 @@ public class ExchangeService
     public const double ForcedLiquidationSlippageRate = 0.02;
     public const int DefaultQuantityPerLot = 100;
     private const int MaxAccountHistoryEntries = 10;
+    private const int DeliveryDefaultFixedFee = 1000;
+    private const double DeliveryDefaultPenaltyRate = 0.05;
+
+    public readonly record struct DeliveryPreview(
+        int DeliveryPrice,
+        int Quantity,
+        int DeliveryValue,
+        int StoredQuantity,
+        int ShortageQuantity,
+        int ShortageValue,
+        int FixedFee,
+        int Penalty,
+        int DefaultCost
+    );
 
     private readonly IModHelper helper;
     private readonly IMonitor monitor;
     private readonly LedgerService ledgerService;
     private readonly MarketPriceService marketPriceService;
+    private readonly ArtisanIdentityService artisanIdentityService;
 
     private ExchangeSaveData data;
     private string? loadedSaveId = null;
@@ -37,6 +53,7 @@ public class ExchangeService
         this.monitor = monitor;
         this.ledgerService = ledgerService;
         this.marketPriceService = marketPriceService;
+        this.artisanIdentityService = new ArtisanIdentityService(monitor);
         this.data = new ExchangeSaveData();
 
         this.Load();
@@ -161,7 +178,7 @@ public class ExchangeService
 
         this.AddHistory(
             "Deposit",
-            $"Transfer to Exchange Account: {amount}g",
+            I18n.Get("exchange.history_deposit", new { amount }),
             amount,
             transactionId
         );
@@ -222,7 +239,7 @@ public class ExchangeService
 
         this.AddHistory(
             "Withdraw",
-            $"Transfer from Exchange Account: {amount}g",
+            I18n.Get("exchange.history_withdraw", new { amount }),
             -amount,
             transactionId
         );
@@ -332,7 +349,13 @@ public class ExchangeService
 
         this.AddHistory(
             "Open Position",
-            $"Open {direction} {spec.DisplayName} x{lots}: margin {initialMarginRequired}g",
+            I18n.Get("exchange.history_open_position", new
+            {
+                direction = direction == ExchangePosition.DirectionLong ? I18n.Get("exchange.long") : I18n.Get("exchange.short"),
+                name = spec.DisplayName,
+                lots,
+                margin = initialMarginRequired
+            }),
             -initialMarginRequired,
             contractId
         );
@@ -517,6 +540,231 @@ public class ExchangeService
         return true;
     }
 
+
+    public bool TryDepositDeliveryGoods(
+        string contractId,
+        out string message
+    )
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (!Context.IsWorldReady)
+        {
+            message = I18n.Get("exchange.error_save_required");
+            return false;
+        }
+
+        ExchangePosition? position = this.FindPosition(contractId);
+        if (position is null || !string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase))
+        {
+            message = I18n.Get("exchange.delivery_error_no_pending_position");
+            return false;
+        }
+
+        if (!string.Equals(position.Direction, ExchangePosition.DirectionShort, StringComparison.OrdinalIgnoreCase))
+        {
+            message = I18n.Get("exchange.delivery_error_not_short");
+            return false;
+        }
+
+        int storedQuantity = this.GetDeliveryStorageQuantity(position);
+        int requiredQuantity = Math.Max(0, position.TotalQuantity - storedQuantity);
+        if (requiredQuantity <= 0)
+        {
+            message = I18n.Get("exchange.delivery_deposit_not_required");
+            return false;
+        }
+
+        int depositedQuantity = this.TakeItemsFromPlayerInventory(position, requiredQuantity);
+        if (depositedQuantity <= 0)
+        {
+            message = I18n.Get("exchange.delivery_deposit_error_no_item", new
+            {
+                name = position.DisplayName,
+                required = requiredQuantity
+            });
+            return false;
+        }
+
+        this.AddDeliveryStorage(position, depositedQuantity);
+
+        this.AddHistory(
+            "Delivery Deposit",
+            I18n.Get("exchange.history_delivery_deposit", new
+            {
+                contract = position.ContractId,
+                name = position.DisplayName,
+                amount = depositedQuantity
+            }),
+            0,
+            position.ContractId
+        );
+
+        this.Save();
+
+        message = I18n.Get("exchange.delivery_deposit_success", new
+        {
+            contract = position.ContractId,
+            amount = depositedQuantity,
+            stored = this.GetDeliveryStorageQuantity(position),
+            required = position.TotalQuantity
+        });
+        return true;
+    }
+
+    public DeliveryPreview GetDeliveryPreview(ExchangePosition position)
+    {
+        if (position is null)
+            return new DeliveryPreview(1, 0, 0, 0, 0, 0, DeliveryDefaultFixedFee, 0, DeliveryDefaultFixedFee);
+
+        int deliveryPrice = this.GetDeliveryPrice(position);
+        int quantity = Math.Max(0, position.TotalQuantity);
+        int deliveryValue = deliveryPrice * quantity;
+        int storedQuantity = this.GetDeliveryStorageQuantity(position);
+        int shortageQuantity = Math.Max(0, quantity - storedQuantity);
+        int shortageValue = shortageQuantity * Math.Max(1, deliveryPrice);
+        int penalty = (int)Math.Ceiling(Math.Max(0, position.OpenNotionalValue) * DeliveryDefaultPenaltyRate);
+        int defaultCost = shortageValue + DeliveryDefaultFixedFee + penalty;
+
+        return new DeliveryPreview(
+            deliveryPrice,
+            quantity,
+            deliveryValue,
+            storedQuantity,
+            shortageQuantity,
+            shortageValue,
+            DeliveryDefaultFixedFee,
+            penalty,
+            defaultCost
+        );
+    }
+
+    public bool TryExecuteDelivery(
+        string contractId,
+        out string message
+    )
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (!Context.IsWorldReady)
+        {
+            message = I18n.Get("exchange.error_save_required");
+            return false;
+        }
+
+        ExchangePosition? position = this.FindPosition(contractId);
+        if (position is null || !string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase))
+        {
+            message = I18n.Get("exchange.delivery_error_no_pending_position");
+            return false;
+        }
+
+        if (string.Equals(position.Direction, ExchangePosition.DirectionLong, StringComparison.OrdinalIgnoreCase))
+        {
+            if (this.data.Account.Debt > 0)
+            {
+                message = I18n.Get("exchange.delivery_error_debt_blocks_delivery", new { debt = this.data.Account.Debt });
+                return false;
+            }
+
+            return this.ExecuteLongDelivery(position, out message);
+        }
+
+        int requiredQuantity = Math.Max(0, position.TotalQuantity);
+        int storedQuantity = this.GetDeliveryStorageQuantity(position);
+        if (storedQuantity < requiredQuantity && this.data.Account.Debt > 0)
+        {
+            message = I18n.Get("exchange.delivery_error_debt_blocks_delivery", new { debt = this.data.Account.Debt });
+            return false;
+        }
+
+        return this.ExecuteShortDeliveryOrDefault(position, out message);
+    }
+
+    public bool TryClaimDeliveredGoods(
+        string contractId,
+        out string message
+    )
+    {
+        this.EnsureLoadedForCurrentSave();
+
+        if (!Context.IsWorldReady)
+        {
+            message = I18n.Get("exchange.error_save_required");
+            return false;
+        }
+
+        ExchangePosition? position = this.FindPosition(contractId);
+        if (position is null || !string.Equals(position.Status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase))
+        {
+            message = I18n.Get("exchange.delivery_claim_error_no_delivered_position");
+            return false;
+        }
+
+        if (!string.Equals(position.Direction, ExchangePosition.DirectionLong, StringComparison.OrdinalIgnoreCase))
+        {
+            message = I18n.Get("exchange.delivery_claim_error_not_long");
+            return false;
+        }
+
+        int availableQuantity = this.GetDeliveryStorageQuantity(position);
+        int claimQuantity = Math.Min(Math.Max(0, position.TotalQuantity), availableQuantity);
+        if (claimQuantity <= 0)
+        {
+            message = I18n.Get("exchange.delivery_claim_error_no_goods");
+            return false;
+        }
+
+        Item? item = this.CreateDeliveryItem(position, claimQuantity);
+        if (item is null)
+        {
+            message = I18n.Get("exchange.delivery_claim_error_create_item");
+            return false;
+        }
+
+        if (!Game1.player.addItemToInventoryBool(item))
+        {
+            message = I18n.Get("exchange.delivery_claim_error_inventory_full");
+            return false;
+        }
+
+        this.RemoveDeliveryStorage(position, claimQuantity);
+
+        this.AddHistory(
+            "Delivery Claim",
+            I18n.Get("exchange.history_delivery_claim", new
+            {
+                contract = position.ContractId,
+                name = position.DisplayName,
+                amount = claimQuantity
+            }),
+            0,
+            position.ContractId
+        );
+
+        this.Save();
+
+        message = I18n.Get("exchange.delivery_claim_success", new
+        {
+            contract = position.ContractId,
+            amount = claimQuantity,
+            name = position.DisplayName
+        });
+        return true;
+    }
+
+    public int GetDeliveryStorageQuantity(ExchangePosition position)
+    {
+        if (position is null)
+            return 0;
+
+        this.EnsureLoadedForCurrentSave();
+
+        return this.data.Account.DeliveryStorage
+            .Where(entry => this.IsSameDeliveryItem(entry, position))
+            .Sum(entry => Math.Max(0, entry.Quantity));
+    }
+
     public string GetDebugStatus()
     {
         this.EnsureLoadedForCurrentSave();
@@ -543,6 +791,8 @@ public class ExchangeService
             );
             return;
         }
+
+        int collectedDebt = this.CollectExchangeDebtFromPlayerWallet(todayDateIndex);
 
         int settledPositions = 0;
         int totalSettlement = 0;
@@ -596,7 +846,14 @@ public class ExchangeService
 
             this.AddHistory(
                 "Daily Settlement",
-                $"{position.ContractId} {position.DisplayName}: {FormatSignedAmount(settlementAmount)} at {currentPrice}g; margin {FormatSignedAmount(allocation.MarginChange)}, available cash {FormatSignedAmount(allocation.AvailableCashChange)}",
+                I18n.Get("exchange.history_daily_settlement", new
+                {
+                    contract = position.ContractId,
+                    name = position.DisplayName,
+                    settlement = FormatSignedAmount(settlementAmount),
+                    margin = FormatSignedAmount(allocation.MarginChange),
+                    available = FormatSignedAmount(allocation.AvailableCashChange)
+                }),
                 settlementAmount,
                 position.ContractId
             );
@@ -612,9 +869,62 @@ public class ExchangeService
         this.Save();
 
         this.monitor.Log(
-            $"Exchange daily settlement processed: positions={settledPositions}, total={totalSettlement}g, autoTopUps={marginRiskResult.AutoTopUps}, marginCalls={marginRiskResult.MarginCalls}, forcedLiquidations={marginRiskResult.ForcedLiquidations}, dateIndex={todayDateIndex}.",
+            $"Exchange daily settlement processed: positions={settledPositions}, total={totalSettlement}g, debtCollected={collectedDebt}g, autoTopUps={marginRiskResult.AutoTopUps}, marginCalls={marginRiskResult.MarginCalls}, forcedLiquidations={marginRiskResult.ForcedLiquidations}, dateIndex={todayDateIndex}.",
             LogLevel.Trace
         );
+    }
+
+    private int CollectExchangeDebtFromPlayerWallet(int todayDateIndex)
+    {
+        int debt = Math.Max(0, this.data.Account.Debt);
+        if (debt <= 0)
+            return 0;
+
+        string transactionId = this.CreateTransactionId("exchange_debt_collection");
+
+        this.ledgerService.SuppressNextExpenseAmount(
+            debt,
+            reason: "ExchangeDebtCollection",
+            source: "Exchange Debt",
+            transactionId: transactionId
+        );
+
+        this.ledgerService.AddExpense(
+            "Exchange Debt",
+            "Exchange Debt Collection",
+            1,
+            debt,
+            itemId: string.Empty,
+            dataOrigin: "ExchangeDebtCollection",
+            transactionId: transactionId
+        );
+
+        // Reality Check already allows the farm wallet to go negative for debt.
+        // Paying the exchange debt moves money from the player's wallet into the
+        // exchange account, which clears the exchange-side deficit.
+        Game1.player.Money -= debt;
+        this.data.Account.CashBalance += debt;
+        this.SyncDebtFromAccountDeficit();
+
+        this.AddHistory(
+            "Debt Collection",
+            I18n.Get("exchange.history_debt_collection", new
+            {
+                amount = debt
+            }),
+            -debt,
+            transactionId
+        );
+
+        Game1.addHUDMessage(new HUDMessage(
+            I18n.Get("exchange.debt_collection_hud", new
+            {
+                amount = debt
+            }),
+            HUDMessage.error_type
+        ));
+
+        return debt;
     }
 
     private void ProcessPreDeliveryWarnings(int todayDateIndex)
@@ -900,6 +1210,474 @@ public class ExchangeService
             return Math.Max(1, (int)Math.Ceiling(safeMarketPrice * (1 + ForcedLiquidationSlippageRate)));
 
         return Math.Max(1, (int)Math.Floor(safeMarketPrice * (1 - ForcedLiquidationSlippageRate)));
+    }
+
+
+    private bool ExecuteLongDelivery(
+        ExchangePosition position,
+        out string message
+    )
+    {
+        int totalQuantity = Math.Max(0, position.TotalQuantity);
+        int deliveryPrice = this.GetDeliveryPrice(position);
+        int deliveryValue = deliveryPrice * totalQuantity;
+        int releasedMargin = Math.Max(0, position.PositionMargin);
+
+        Item? deliveredItem = this.CreateDeliveryItem(position, totalQuantity);
+        if (deliveredItem is null)
+        {
+            message = I18n.Get("exchange.delivery_claim_error_create_item");
+            return false;
+        }
+
+        if (!Game1.player.addItemToInventoryBool(deliveredItem))
+        {
+            message = I18n.Get("exchange.delivery_claim_error_inventory_full");
+            return false;
+        }
+
+        this.data.Account.CashBalance -= deliveryValue;
+
+        position.Status = ExchangePosition.StatusDelivered;
+        position.PositionMargin = 0;
+        position.CurrentPrice = deliveryPrice;
+        position.LastSettlementPrice = deliveryPrice;
+        position.MarginCallDateIndex = 0;
+        position.MarginCallRequiredTopUp = 0;
+        position.LastRiskMessage = I18n.Get("exchange.delivery_long_note");
+
+        this.SyncDebtFromAccountDeficit();
+
+        this.AddHistory(
+            "Long Delivery",
+            I18n.Get("exchange.history_long_delivery", new
+            {
+                contract = position.ContractId,
+                name = this.ResolvePositionDisplayName(position),
+                price = deliveryPrice,
+                value = deliveryValue,
+                quantity = totalQuantity,
+                released = releasedMargin
+            }),
+            -deliveryValue,
+            position.ContractId
+        );
+
+        this.Save();
+
+        message = I18n.Get("exchange.delivery_long_success", new
+        {
+            contract = position.ContractId,
+            quantity = totalQuantity,
+            name = this.ResolvePositionDisplayName(position),
+            value = deliveryValue
+        });
+        return true;
+    }
+
+    private bool ExecuteShortDeliveryOrDefault(
+        ExchangePosition position,
+        out string message
+    )
+    {
+        int deliveryPrice = this.GetDeliveryPrice(position);
+        int totalQuantity = Math.Max(0, position.TotalQuantity);
+        int storedQuantity = this.GetDeliveryStorageQuantity(position);
+
+        if (storedQuantity >= totalQuantity)
+        {
+            int deliveryValue = deliveryPrice * totalQuantity;
+            int releasedMargin = Math.Max(0, position.PositionMargin);
+
+            this.RemoveDeliveryStorage(position, totalQuantity);
+            this.data.Account.CashBalance += deliveryValue;
+
+            position.Status = ExchangePosition.StatusDelivered;
+            position.PositionMargin = 0;
+            position.CurrentPrice = deliveryPrice;
+            position.LastSettlementPrice = deliveryPrice;
+            position.MarginCallDateIndex = 0;
+            position.MarginCallRequiredTopUp = 0;
+            position.LastRiskMessage = I18n.Get("exchange.delivery_short_note");
+
+            this.SyncDebtFromAccountDeficit();
+
+            this.AddHistory(
+                "Short Delivery",
+                I18n.Get("exchange.history_short_delivery", new
+                {
+                    contract = position.ContractId,
+                    name = position.DisplayName,
+                    price = deliveryPrice,
+                    value = deliveryValue,
+                    quantity = totalQuantity,
+                    released = releasedMargin
+                }),
+                deliveryValue,
+                position.ContractId
+            );
+
+            this.Save();
+
+            message = I18n.Get("exchange.delivery_short_success", new
+            {
+                contract = position.ContractId,
+                quantity = totalQuantity,
+                name = position.DisplayName,
+                value = deliveryValue
+            });
+            return true;
+        }
+
+        return this.ExecuteDeliveryDefault(position, deliveryPrice, storedQuantity, out message);
+    }
+
+    private bool ExecuteDeliveryDefault(
+        ExchangePosition position,
+        int deliveryPrice,
+        int storedQuantity,
+        out string message
+    )
+    {
+        int totalQuantity = Math.Max(0, position.TotalQuantity);
+        int usedQuantity = Math.Min(Math.Max(0, storedQuantity), totalQuantity);
+        int shortageQuantity = Math.Max(0, totalQuantity - usedQuantity);
+        int shortageValue = shortageQuantity * Math.Max(1, deliveryPrice);
+        int penalty = (int)Math.Ceiling(Math.Max(0, position.OpenNotionalValue) * DeliveryDefaultPenaltyRate);
+        int defaultCost = shortageValue + DeliveryDefaultFixedFee + penalty;
+        int releasedMargin = Math.Max(0, position.PositionMargin);
+
+        if (usedQuantity > 0)
+            this.RemoveDeliveryStorage(position, usedQuantity);
+
+        this.data.Account.CashBalance -= defaultCost;
+
+        position.Status = ExchangePosition.StatusDeliveryDefault;
+        position.PositionMargin = 0;
+        position.CurrentPrice = deliveryPrice;
+        position.LastSettlementPrice = deliveryPrice;
+        position.MarginCallDateIndex = 0;
+        position.MarginCallRequiredTopUp = 0;
+        position.LastRiskMessage = I18n.Get("exchange.delivery_default_note", new
+        {
+            shortage = shortageQuantity,
+            cost = defaultCost
+        });
+
+        this.SyncDebtFromAccountDeficit();
+
+        this.AddHistory(
+            "Delivery Default",
+            I18n.Get("exchange.history_delivery_default", new
+            {
+                contract = position.ContractId,
+                name = position.DisplayName,
+                shortage = shortageQuantity,
+                value = shortageValue,
+                fee = DeliveryDefaultFixedFee,
+                penalty,
+                cost = defaultCost,
+                released = releasedMargin
+            }),
+            -defaultCost,
+            position.ContractId
+        );
+
+        this.Save();
+
+        message = I18n.Get("exchange.delivery_default_success", new
+        {
+            contract = position.ContractId,
+            shortage = shortageQuantity,
+            cost = defaultCost
+        });
+        return true;
+    }
+
+    private int GetDeliveryPrice(ExchangePosition position)
+    {
+        if (position.CurrentPrice > 0)
+            return position.CurrentPrice;
+
+        if (position.LastSettlementPrice > 0)
+            return position.LastSettlementPrice;
+
+        return Math.Max(1, position.OpenPrice);
+    }
+
+    private ExchangePosition? FindPosition(string contractId)
+    {
+        return this.data.Account.Positions.FirstOrDefault(position =>
+            string.Equals(position.ContractId, contractId, StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    private bool IsSameDeliveryItem(ExchangeDeliveryStorageEntry entry, ExchangePosition position)
+    {
+        return string.Equals(entry.MarketCommodityKey, position.MarketCommodityKey, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(entry.ItemId, position.ItemId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(entry.ParentItemId, position.ParentItemId, StringComparison.OrdinalIgnoreCase)
+            && entry.Quality == 0;
+    }
+
+    private void AddDeliveryStorage(ExchangePosition position, int quantity)
+    {
+        if (quantity <= 0)
+            return;
+
+        ExchangeDeliveryStorageEntry? entry = this.data.Account.DeliveryStorage.FirstOrDefault(entry => this.IsSameDeliveryItem(entry, position));
+        if (entry is null)
+        {
+            entry = new ExchangeDeliveryStorageEntry
+            {
+                MarketCommodityKey = position.MarketCommodityKey,
+                ItemId = position.ItemId,
+                ParentItemId = position.ParentItemId,
+                Quality = 0,
+                Quantity = 0
+            };
+            this.data.Account.DeliveryStorage.Add(entry);
+        }
+
+        entry.Quantity += quantity;
+    }
+
+    private void RemoveDeliveryStorage(ExchangePosition position, int quantity)
+    {
+        if (quantity <= 0)
+            return;
+
+        int remaining = quantity;
+        foreach (ExchangeDeliveryStorageEntry entry in this.data.Account.DeliveryStorage.Where(entry => this.IsSameDeliveryItem(entry, position)).ToList())
+        {
+            int take = Math.Min(Math.Max(0, entry.Quantity), remaining);
+            entry.Quantity -= take;
+            remaining -= take;
+
+            if (entry.Quantity <= 0)
+                this.data.Account.DeliveryStorage.Remove(entry);
+
+            if (remaining <= 0)
+                break;
+        }
+    }
+
+    private int TakeItemsFromPlayerInventory(
+        ExchangePosition position,
+        int quantity
+    )
+    {
+        int remaining = Math.Max(0, quantity);
+        int taken = 0;
+
+        for (int index = 0; index < Game1.player.Items.Count && remaining > 0; index++)
+        {
+            Item? item = Game1.player.Items[index];
+            if (item is not StardewValley.Object obj)
+                continue;
+
+            if (!this.IsMatchingDeliveryInventoryItem(obj, position))
+                continue;
+
+            int take = Math.Min(Math.Max(0, obj.Stack), remaining);
+            if (take <= 0)
+                continue;
+
+            obj.Stack -= take;
+            remaining -= take;
+            taken += take;
+
+            if (obj.Stack <= 0)
+                Game1.player.Items[index] = null;
+        }
+
+        return taken;
+    }
+
+    private Item? CreateDeliveryItem(
+        ExchangePosition position,
+        int quantity
+    )
+    {
+        if (quantity <= 0 || string.IsNullOrWhiteSpace(position.ItemId))
+            return null;
+
+        try
+        {
+            Item item = ItemRegistry.Create(position.ItemId);
+            this.ApplyArtisanIdentityToItem(item, position);
+            item.Stack = quantity;
+
+            if (item is StardewValley.Object obj)
+                obj.Quality = 0;
+
+            return item;
+        }
+        catch (Exception ex)
+        {
+            this.monitor.Log($"Failed to create delivery item '{position.ItemId}' for {position.ContractId}: {ex}", LogLevel.Warn);
+            return null;
+        }
+    }
+
+    private bool IsMatchingDeliveryInventoryItem(StardewValley.Object obj, ExchangePosition position)
+    {
+        if (obj is null || position is null)
+            return false;
+
+        if (!string.Equals(obj.QualifiedItemId, position.ItemId, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (obj.Quality != 0)
+            return false;
+
+        if (!IsFlavoredArtisanPosition(position))
+            return true;
+
+        ArtisanIdentity identity = this.artisanIdentityService.Resolve(obj);
+        return string.Equals(identity.MarketCommodityKey, position.MarketCommodityKey, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(identity.ParentItemId, position.ParentItemId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolvePositionDisplayName(ExchangePosition position)
+    {
+        Item? item = this.CreateDeliveryItem(position, 1);
+        if (item is not null && !string.IsNullOrWhiteSpace(item.DisplayName))
+            return item.DisplayName;
+
+        return position.DisplayName;
+    }
+
+    private static bool IsFlavoredArtisanPosition(ExchangePosition position)
+    {
+        return position is not null
+            && !string.IsNullOrWhiteSpace(position.ParentItemId)
+            && !string.IsNullOrWhiteSpace(position.MarketCommodityKey)
+            && position.MarketCommodityKey.StartsWith("Artisan:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ApplyArtisanIdentityToItem(Item item, ExchangePosition position)
+    {
+        if (item is null || !IsFlavoredArtisanPosition(position))
+            return;
+
+        string? preserveType = TryReadPreserveTypeFromMarketKey(position.MarketCommodityKey);
+        int? parentIndex = TryReadObjectIndex(position.ParentItemId);
+
+        if (string.IsNullOrWhiteSpace(preserveType) || parentIndex is null)
+            return;
+
+        TryWriteMemberValue(item, "preserve", preserveType);
+        TryWriteMemberValue(item, "preservedParentSheetIndex", parentIndex.Value);
+    }
+
+    private static string? TryReadPreserveTypeFromMarketKey(string marketCommodityKey)
+    {
+        if (string.IsNullOrWhiteSpace(marketCommodityKey))
+            return null;
+
+        string[] parts = marketCommodityKey.Split(':');
+        return parts.Length >= 3 ? parts[1] : null;
+    }
+
+    private static int? TryReadObjectIndex(string qualifiedItemId)
+    {
+        if (string.IsNullOrWhiteSpace(qualifiedItemId))
+            return null;
+
+        string digits = new(qualifiedItemId.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out int parsed) ? parsed : null;
+    }
+
+    private static void TryWriteMemberValue(Item item, string memberName, object value)
+    {
+        Type? type = item.GetType();
+
+        while (type is not null)
+        {
+            FieldInfo? field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field is not null)
+            {
+                if (TryWriteNetFieldValue(field.GetValue(item), value))
+                    return;
+
+                object? converted = TryConvertMemberValue(field.FieldType, value);
+                if (converted is not null)
+                {
+                    field.SetValue(item, converted);
+                    return;
+                }
+            }
+
+            PropertyInfo? property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property is not null && property.GetIndexParameters().Length == 0)
+            {
+                object? currentValue = null;
+                try { currentValue = property.GetValue(item); } catch { }
+
+                if (TryWriteNetFieldValue(currentValue, value))
+                    return;
+
+                if (property.CanWrite)
+                {
+                    object? converted = TryConvertMemberValue(property.PropertyType, value);
+                    if (converted is not null)
+                    {
+                        property.SetValue(item, converted);
+                        return;
+                    }
+                }
+            }
+
+            type = type.BaseType;
+        }
+    }
+
+    private static bool TryWriteNetFieldValue(object? target, object value)
+    {
+        if (target is null)
+            return false;
+
+        PropertyInfo? valueProperty = target.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (valueProperty is null || !valueProperty.CanWrite)
+            return false;
+
+        object? converted = TryConvertMemberValue(valueProperty.PropertyType, value);
+        if (converted is null)
+            return false;
+
+        valueProperty.SetValue(target, converted);
+        return true;
+    }
+
+    private static object? TryConvertMemberValue(Type targetType, object value)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        try
+        {
+            if (effectiveType == typeof(string))
+                return value.ToString();
+
+            if (effectiveType == typeof(int))
+                return Convert.ToInt32(value);
+
+            if (effectiveType.IsEnum)
+            {
+                string? text = value.ToString();
+                if (!string.IsNullOrWhiteSpace(text) && Enum.TryParse(effectiveType, text, ignoreCase: true, out object? parsed))
+                    return parsed;
+            }
+
+            if (effectiveType.IsInstanceOfType(value))
+                return value;
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private void SyncDebtFromAccountDeficit()

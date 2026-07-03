@@ -117,7 +117,7 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         this.annualTab = new Rectangle(x + 280, y + 25, 115, 55);
         this.taxTab = new Rectangle(x + 400, y + 25, 145, 55);
         this.marketTab = new Rectangle(x + 550, y + 25, 190, 55);
-        this.exchangeButton = new Rectangle(x + 575, y + 92, 165, 48);
+        this.exchangeButton = new Rectangle(x + 540, y + 104, 205, 34);
     }
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -370,20 +370,19 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         if (this.exchangeService is null)
             return;
 
-        IClickableMenu.drawTextureBox(
-            b,
-            this.exchangeButton.X,
-            this.exchangeButton.Y,
-            this.exchangeButton.Width,
-            this.exchangeButton.Height,
-            Color.White
+        b.Draw(Game1.staminaRect, this.exchangeButton, Color.SaddleBrown * 0.12f);
+        b.Draw(
+            Game1.staminaRect,
+            new Rectangle(this.exchangeButton.X, this.exchangeButton.Y, 5, this.exchangeButton.Height),
+            Color.DarkGoldenrod * 0.82f
         );
+        this.DrawRectangleOutline(b, this.exchangeButton, 1, Color.SaddleBrown * 0.46f);
 
         Utility.drawTextWithShadow(
             b,
             I18n.Get("exchange.button"),
             Game1.smallFont,
-            new Vector2(this.exchangeButton.X + 24, this.exchangeButton.Y + 12),
+            new Vector2(this.exchangeButton.X + 16, this.exchangeButton.Y + 7),
             Game1.textColor
         );
     }
@@ -2050,6 +2049,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
         if (this.IsNonItemIncomeSummary(item))
         {
+            displayName = I18n.Category(displayName);
             this.DrawLine(
                 b,
                 $"{displayName}   {item.Amount}g",

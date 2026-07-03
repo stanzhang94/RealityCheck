@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -26,6 +27,14 @@ public class ExchangeMenu : IClickableMenu
         Artisan,
         Vegetable,
         Fruit
+    }
+
+    private enum DeliveryModalKind
+    {
+        None,
+        LongDelivery,
+        ShortDelivery,
+        DeliveryDefault
     }
 
     private const int CommodityListVisibleRows = 9;
@@ -92,6 +101,9 @@ public class ExchangeMenu : IClickableMenu
     private int selectedLots = 1;
     private bool confirmCreateOpen;
     private int createPageScrollOffset;
+    private string pendingDeliveryDefaultContractId = string.Empty;
+    private DeliveryModalKind deliveryModalKind = DeliveryModalKind.None;
+    private string deliveryModalContractId = string.Empty;
 
 
     private sealed class PositionsLayout
@@ -103,6 +115,9 @@ public class ExchangeMenu : IClickableMenu
         public Rectangle DetailBounds { get; init; }
         public Rectangle TopUpButton { get; init; }
         public Rectangle ClosePositionButton { get; init; }
+        public Rectangle DepositDeliveryButton { get; init; }
+        public Rectangle ExecuteDeliveryButton { get; init; }
+        public Rectangle ClaimDeliveryButton { get; init; }
     }
 
     private sealed class CreateLayout
@@ -219,6 +234,12 @@ public class ExchangeMenu : IClickableMenu
     public override void receiveLeftClick(int x, int y, bool playSound = true)
     {
         base.receiveLeftClick(x, y, playSound);
+
+        if (this.deliveryModalKind != DeliveryModalKind.None)
+        {
+            this.HandleDeliveryModalClick(x, y);
+            return;
+        }
 
         if (this.confirmCreateOpen)
         {
@@ -450,6 +471,30 @@ public class ExchangeMenu : IClickableMenu
     }
 
 
+    private void HandleDeliveryModalClick(int x, int y)
+    {
+        Rectangle box = this.GetDeliveryModalBox();
+        (Rectangle confirm, Rectangle cancel) = this.GetDeliveryModalButtons(box);
+
+        if (cancel.Contains(x, y))
+        {
+            this.CloseDeliveryModal();
+            Game1.playSound("bigDeSelect");
+            return;
+        }
+
+        if (!confirm.Contains(x, y))
+            return;
+
+        string contractId = this.deliveryModalContractId;
+        this.CloseDeliveryModal();
+
+        bool success = this.exchangeService.TryExecuteDelivery(contractId, out string message);
+        this.SelectPositionByContractId(contractId);
+        this.SetPositionsMessage(message, success);
+        Game1.playSound(success ? "coin" : "cancel");
+    }
+
 
     private void HandlePositionsClick(int x, int y)
     {
@@ -478,6 +523,31 @@ public class ExchangeMenu : IClickableMenu
         if (layout.ClosePositionButton.Contains(x, y) && this.CanClosePositionForUi(selectedPosition))
         {
             bool success = this.exchangeService.TryClosePosition(selectedPosition.ContractId, out string message);
+            this.SetPositionsMessage(message, success);
+            Game1.playSound(success ? "coin" : "cancel");
+            return;
+        }
+
+        if (layout.DepositDeliveryButton.Contains(x, y) && this.CanDepositDeliveryForUi(selectedPosition))
+        {
+            bool success = this.exchangeService.TryDepositDeliveryGoods(selectedPosition.ContractId, out string message);
+            if (success && string.Equals(this.pendingDeliveryDefaultContractId, selectedPosition.ContractId, StringComparison.OrdinalIgnoreCase))
+                this.pendingDeliveryDefaultContractId = string.Empty;
+
+            this.SetPositionsMessage(message, success);
+            Game1.playSound(success ? "coin" : "cancel");
+            return;
+        }
+
+        if (layout.ExecuteDeliveryButton.Contains(x, y) && this.CanExecuteDeliveryForUi(selectedPosition))
+        {
+            this.OpenDeliveryModal(selectedPosition);
+            return;
+        }
+
+        if (layout.ClaimDeliveryButton.Contains(x, y) && this.CanClaimDeliveryForUi(selectedPosition))
+        {
+            bool success = this.exchangeService.TryClaimDeliveredGoods(selectedPosition.ContractId, out string message);
             this.SetPositionsMessage(message, success);
             Game1.playSound(success ? "coin" : "cancel");
             return;
@@ -644,6 +714,9 @@ public class ExchangeMenu : IClickableMenu
         if (this.confirmCreateOpen)
             this.DrawCreateConfirmation(b);
 
+        if (this.deliveryModalKind != DeliveryModalKind.None)
+            this.DrawDeliveryModal(b);
+
         this.drawMouse(b);
     }
 
@@ -702,7 +775,7 @@ public class ExchangeMenu : IClickableMenu
             this.DrawLine(b, I18n.Get("exchange.debt", new { amount = account.Debt }), x, y, Color.Red);
         }
 
-        this.DrawAccountHistory(b, account, x, this.yPositionOnScreen + 382);
+        this.DrawAccountHistory(b, account, x, y + 50);
     }
 
     private void DrawAccountHistory(SpriteBatch b, ExchangeAccount account, int x, int y)
@@ -716,10 +789,12 @@ public class ExchangeMenu : IClickableMenu
         );
 
         y += 34;
+        int bottomLimit = this.yPositionOnScreen + this.height - 70;
+        int maxRows = Math.Max(1, Math.Min(10, (bottomLimit - y) / 28));
         List<ExchangeAccountHistoryEntry> entries = account.AccountHistory
             .AsEnumerable()
             .Reverse()
-            .Take(10)
+            .Take(maxRows)
             .ToList();
 
         if (entries.Count == 0)
@@ -728,15 +803,17 @@ public class ExchangeMenu : IClickableMenu
             return;
         }
 
-        int maxWidth = Math.Max(360, this.transferInputBox.X - x - 40);
+        int rightLimit = this.xPositionOnScreen + this.width - 82;
+        int maxWidth = Math.Max(360, rightLimit - x);
         foreach (ExchangeAccountHistoryEntry entry in entries)
         {
             string date = entry.Year > 0
                 ? I18n.Date(entry.Year, entry.Season, entry.Day)
                 : string.Empty;
+            string description = this.FormatAccountHistoryDescription(entry.Description);
             string line = string.IsNullOrWhiteSpace(date)
-                ? entry.Description
-                : $"{date}  {entry.Description}";
+                ? description
+                : $"{date}  {description}";
 
             this.DrawLine(
                 b,
@@ -747,6 +824,168 @@ public class ExchangeMenu : IClickableMenu
             );
             y += 28;
         }
+    }
+
+    private string FormatAccountHistoryDescription(string description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return description;
+
+        string text = description;
+        text = text.Replace("Transfer to Exchange Account", I18n.Get("ledger.exchange_transfer_to"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Transfer from Exchange Account", I18n.Get("ledger.exchange_transfer_from"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Exchange debt collected from farm wallet", I18n.Get("ledger.exchange_debt_collection"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Open Long", I18n.Get("ledger.exchange_open_long"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Open Short", I18n.Get("ledger.exchange_open_short"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace(": margin ", "：" + I18n.Get("ledger.margin") + " ", StringComparison.OrdinalIgnoreCase);
+        text = text.Replace(" margin ", " " + I18n.Get("ledger.margin") + " ", StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("available cash", I18n.Get("exchange.history_available_cash"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("at ", I18n.Get("exchange.history_at_price_prefix"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Forced Liquidation", I18n.Get("exchange.status_forced_liquidated"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Delivery Default", I18n.Get("exchange.status_delivery_default"), StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("Close Position", I18n.Get("exchange.status_closed"), StringComparison.OrdinalIgnoreCase);
+
+        string defaultSummary = this.TrySummarizeDeliveryDefaultHistory(text);
+        if (!string.IsNullOrWhiteSpace(defaultSummary))
+            return defaultSummary;
+
+        string deliverySummary = this.TrySummarizePhysicalDeliveryHistory(text);
+        if (!string.IsNullOrWhiteSpace(deliverySummary))
+            return deliverySummary;
+
+        string liquidationSummary = this.TrySummarizeForcedLiquidationHistory(text);
+        if (!string.IsNullOrWhiteSpace(liquidationSummary))
+            return liquidationSummary;
+
+        return text;
+    }
+
+    private string TrySummarizeDeliveryDefaultHistory(string text)
+    {
+        int defaultIndex = text.IndexOf(I18n.Get("exchange.status_delivery_default"), StringComparison.OrdinalIgnoreCase);
+        if (defaultIndex < 0)
+            return string.Empty;
+
+        string costLabel = I18n.Get("exchange.history_total_cost_label");
+        int costIndex = text.IndexOf(costLabel, StringComparison.OrdinalIgnoreCase);
+        int costLabelLength = costLabel.Length;
+        if (costIndex < 0)
+        {
+            const string englishCostLabel = "total cost";
+            costIndex = text.IndexOf(englishCostLabel, StringComparison.OrdinalIgnoreCase);
+            costLabelLength = englishCostLabel.Length;
+        }
+        if (costIndex < 0)
+            return string.Empty;
+
+        string cost = this.ExtractGoldAmountAfterLabel(text, costIndex + costLabelLength);
+        if (string.IsNullOrWhiteSpace(cost))
+            return string.Empty;
+
+        string prefix = text[..defaultIndex].TrimEnd('：', ':', ' ', '，', ',');
+        string separator = string.IsNullOrWhiteSpace(prefix) ? string.Empty : "：";
+        return $"{prefix}{separator}{I18n.Get("exchange.status_delivery_default")}，{costLabel} {cost}。";
+    }
+
+
+    private string TrySummarizePhysicalDeliveryHistory(string text)
+    {
+        bool isLong = text.Contains("多头", StringComparison.OrdinalIgnoreCase) || text.Contains("long delivery", StringComparison.OrdinalIgnoreCase);
+        bool isShort = text.Contains("空头", StringComparison.OrdinalIgnoreCase) || text.Contains("short delivery", StringComparison.OrdinalIgnoreCase);
+        bool isDelivery = text.Contains("完成交割", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("交割完成", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("delivery completed", StringComparison.OrdinalIgnoreCase);
+
+        if (!isDelivery || (!isLong && !isShort))
+            return string.Empty;
+
+        int prefixEnd = text.IndexOf("：", StringComparison.OrdinalIgnoreCase);
+        if (prefixEnd < 0)
+            prefixEnd = text.IndexOf(":", StringComparison.OrdinalIgnoreCase);
+        if (prefixEnd < 0)
+            return string.Empty;
+
+        string amountLabel = isLong ? "支付" : "收到";
+        int amountIndex = text.IndexOf(amountLabel, StringComparison.OrdinalIgnoreCase);
+        if (amountIndex < 0 && isShort)
+        {
+            amountLabel = "收入";
+            amountIndex = text.IndexOf(amountLabel, StringComparison.OrdinalIgnoreCase);
+        }
+        if (amountIndex < 0)
+        {
+            amountLabel = isLong ? "paid" : "received";
+            amountIndex = text.IndexOf(amountLabel, StringComparison.OrdinalIgnoreCase);
+        }
+        if (amountIndex < 0)
+            return string.Empty;
+
+        string amount = this.ExtractGoldAmountAfterLabel(text, amountIndex + amountLabel.Length);
+        if (string.IsNullOrWhiteSpace(amount))
+            return string.Empty;
+
+        string prefix = text[..prefixEnd].TrimEnd('：', ':', ' ', '，', ',');
+        string kind = isLong ? I18n.Get("exchange.history_long_delivery_short_label") : I18n.Get("exchange.history_short_delivery_short_label");
+        string cashLabel = isLong ? I18n.Get("exchange.history_paid_label") : I18n.Get("exchange.history_received_label");
+        return $"{prefix}：{kind}，{cashLabel} {amount}。";
+    }
+
+    private string TrySummarizeForcedLiquidationHistory(string text)
+    {
+        int liquidationIndex = text.IndexOf(I18n.Get("exchange.status_forced_liquidated"), StringComparison.OrdinalIgnoreCase);
+        if (liquidationIndex < 0 && text.IndexOf("强平", StringComparison.OrdinalIgnoreCase) < 0)
+            return string.Empty;
+
+        string settlementLabel = I18n.Get("exchange.history_settlement_label");
+        int settlementIndex = text.IndexOf(settlementLabel, StringComparison.OrdinalIgnoreCase);
+        int settlementLabelLength = settlementLabel.Length;
+        if (settlementIndex < 0)
+        {
+            const string profitLossLabel = "盈亏";
+            settlementIndex = text.IndexOf(profitLossLabel, StringComparison.OrdinalIgnoreCase);
+            settlementLabelLength = profitLossLabel.Length;
+        }
+        if (settlementIndex < 0)
+        {
+            const string englishSettlementLabel = "P/L";
+            settlementIndex = text.IndexOf(englishSettlementLabel, StringComparison.OrdinalIgnoreCase);
+            settlementLabelLength = englishSettlementLabel.Length;
+        }
+        if (settlementIndex < 0)
+            return string.Empty;
+
+        string settlement = this.ExtractGoldAmountAfterLabel(text, settlementIndex + settlementLabelLength);
+        if (string.IsNullOrWhiteSpace(settlement))
+            return string.Empty;
+
+        int prefixEnd = liquidationIndex >= 0 ? liquidationIndex : text.IndexOf("：", StringComparison.OrdinalIgnoreCase);
+        if (prefixEnd < 0)
+            prefixEnd = text.IndexOf(":", StringComparison.OrdinalIgnoreCase);
+        if (prefixEnd < 0)
+            prefixEnd = text.IndexOf("强平", StringComparison.OrdinalIgnoreCase);
+        string prefix = text[..prefixEnd].TrimEnd('：', ':', ' ', '，', ',');
+        string separator = string.IsNullOrWhiteSpace(prefix) ? string.Empty : "：";
+        return $"{prefix}{separator}{I18n.Get("exchange.status_forced_liquidated")}，{settlementLabel} {settlement}。";
+    }
+
+    private string ExtractGoldAmountAfterLabel(string text, int startIndex)
+    {
+        if (startIndex < 0 || startIndex >= text.Length)
+            return string.Empty;
+
+        int index = startIndex;
+        while (index < text.Length && (char.IsWhiteSpace(text[index]) || text[index] == '：' || text[index] == ':' || text[index] == '='))
+            index++;
+
+        int amountStart = index;
+        if (index < text.Length && (text[index] == '+' || text[index] == '-'))
+            index++;
+        while (index < text.Length && char.IsDigit(text[index]))
+            index++;
+        if (index < text.Length && (text[index] == 'g' || text[index] == 'G'))
+            index++;
+
+        return index > amountStart ? text[amountStart..index] : string.Empty;
     }
 
     private void DrawTransferPanel(SpriteBatch b)
@@ -875,7 +1114,7 @@ public class ExchangeMenu : IClickableMenu
 
             string title = I18n.Get("exchange.positions_row_title", new
             {
-                name = position.DisplayName,
+                name = this.GetPositionDisplayName(position),
                 direction = this.FormatDirection(position.Direction),
                 lots = position.Lots
             });
@@ -940,7 +1179,7 @@ public class ExchangeMenu : IClickableMenu
 
         Utility.drawTextWithShadow(
             b,
-            position.DisplayName,
+            this.GetPositionDisplayName(position),
             Game1.smallFont,
             new Vector2(detailX, detailY - 10),
             Game1.textColor
@@ -979,10 +1218,45 @@ public class ExchangeMenu : IClickableMenu
         this.DrawLabelValue(b, I18n.Get("exchange.label_expiry"), this.FormatDateIndex(position.ExpiryDateIndex), rightLabelX, rightValueX, rightY);
         rightY += rowHeight;
         this.DrawLabelValue(b, I18n.Get("exchange.position_days_left"), I18n.Get("exchange.value_days", new { days = daysLeft }), rightLabelX, rightValueX, rightY);
+        rightY += rowHeight;
+        if (this.ShouldShowDeliveryStorageRow(position))
+        {
+            int stored = this.exchangeService.GetDeliveryStorageQuantity(position);
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_storage_quantity"), I18n.Get("exchange.delivery_storage_value", new { stored, required = position.TotalQuantity }), rightLabelX, rightValueX, rightY);
+            rightY += rowHeight;
+        }
 
         int requiredTopUp = this.exchangeService.GetRequiredMarginTopUp(position);
         bool isMarginCall = string.Equals(position.Status, ExchangePosition.StatusMarginCall, StringComparison.OrdinalIgnoreCase);
-        if (position.IsOpenLike() && isMarginCall && requiredTopUp > 0)
+        bool showTopUpButton = position.IsOpenLike() && isMarginCall && requiredTopUp > 0;
+        bool showCloseButton = this.CanClosePositionForUi(position);
+        bool showDepositDeliveryButton = this.CanDepositDeliveryForUi(position);
+        bool showExecuteDeliveryButton = this.CanExecuteDeliveryForUi(position);
+        bool showClaimDeliveryButton = this.CanClaimDeliveryForUi(position);
+        bool hasBottomActionButtons = showTopUpButton || showCloseButton || showDepositDeliveryButton || showExecuteDeliveryButton || showClaimDeliveryButton;
+
+        int contentBottom = Math.Max(leftY, rightY);
+        int buttonsTop = Math.Min(
+            Math.Min(layout.TopUpButton.Y, layout.ClosePositionButton.Y),
+            Math.Min(layout.DepositDeliveryButton.Y, layout.ExecuteDeliveryButton.Y)
+        );
+        int chartBottom = hasBottomActionButtons
+            ? buttonsTop - 12
+            : layout.DetailBounds.Bottom - 2;
+        int availableChartHeight = Math.Max(0, chartBottom - contentBottom - 18);
+        int chartHeight = Math.Min(118, availableChartHeight);
+        if (chartHeight >= 64)
+        {
+            Rectangle chartBounds = new(
+                layout.DetailBounds.X,
+                chartBottom - chartHeight,
+                layout.DetailBounds.Width,
+                chartHeight
+            );
+            this.DrawPositionMiniPriceChart(b, position, chartBounds);
+        }
+
+        if (showTopUpButton)
         {
             int noticeY = layout.TopUpButton.Y - 32;
             Utility.drawTextWithShadow(
@@ -996,8 +1270,102 @@ public class ExchangeMenu : IClickableMenu
             this.DrawButton(b, layout.TopUpButton, I18n.Get("exchange.margin_topup_button"), selected: true, enabled: true);
         }
 
-        if (this.CanClosePositionForUi(position))
+        if (showCloseButton)
             this.DrawButton(b, layout.ClosePositionButton, I18n.Get("exchange.close_position_button"), selected: false, enabled: true);
+
+        if (showDepositDeliveryButton)
+            this.DrawButton(b, layout.DepositDeliveryButton, I18n.Get("exchange.delivery_deposit_button"), selected: false, enabled: true);
+
+        if (showExecuteDeliveryButton)
+        {
+            string executeLabel = this.NeedsDeliveryDefaultConfirmation(position)
+                && string.Equals(this.pendingDeliveryDefaultContractId, position.ContractId, StringComparison.OrdinalIgnoreCase)
+                    ? I18n.Get("exchange.delivery_default_confirm_button")
+                    : I18n.Get("exchange.delivery_execute_button");
+
+            this.DrawButton(b, layout.ExecuteDeliveryButton, executeLabel, selected: true, enabled: true);
+        }
+
+        if (showClaimDeliveryButton)
+            this.DrawButton(b, layout.ClaimDeliveryButton, I18n.Get("exchange.delivery_claim_button"), selected: false, enabled: true);
+    }
+
+    private void DrawPositionMiniPriceChart(SpriteBatch b, ExchangePosition position, Rectangle bounds)
+    {
+        if (this.catalogService is null || bounds.Width < 180 || bounds.Height < 64)
+            return;
+
+        List<MarketPriceHistoryPoint> points = this.catalogService
+            .GetMarketPriceHistory(position.MarketCommodityKey)
+            .OrderBy(p => p.DateIndex)
+            .TakeLast(28)
+            .ToList();
+
+        if (points.Count < 2)
+            return;
+
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.position_chart_title"),
+            Game1.smallFont,
+            new Vector2(bounds.X, bounds.Y - 26),
+            Game1.textColor * 0.78f
+        );
+
+        Rectangle chart = new(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        b.Draw(Game1.staminaRect, chart, Color.White * 0.10f);
+        this.DrawRectangleOutline(b, chart, 1, Color.Black * 0.22f);
+
+        int linePrice = CalculateLiquidationPrice(position.OpenPrice, position.Direction);
+        int min = Math.Max(0, Math.Min(points.Min(p => p.MarketUnitPrice), linePrice));
+        int max = Math.Max(1, Math.Max(points.Max(p => p.MarketUnitPrice), linePrice));
+        if (max <= min)
+            max = min + 1;
+
+        float ToY(int price)
+        {
+            float normalized = (price - min) / (float)(max - min);
+            return chart.Bottom - 8 - (chart.Height - 16) * normalized;
+        }
+
+        float riskY = ToY(linePrice);
+        if (riskY >= chart.Y && riskY <= chart.Bottom)
+        {
+            this.DrawPixelLine(
+                b,
+                new Vector2(chart.X + 4, riskY),
+                new Vector2(chart.Right - 4, riskY),
+                Color.Red * 0.68f,
+                2f
+            );
+            Utility.drawTextWithShadow(
+                b,
+                I18n.Get("exchange.history_liquidation_line"),
+                Game1.smallFont,
+                new Vector2(chart.Right - 96, riskY - 24),
+                Color.Red
+            );
+        }
+
+        Vector2? previous = null;
+        for (int i = 0; i < points.Count; i++)
+        {
+            float px = chart.X + 8 + (chart.Width - 16) * (points.Count == 1 ? 0f : i / (float)(points.Count - 1));
+            float py = ToY(points[i].MarketUnitPrice);
+            Vector2 point = new(px, py);
+            if (previous.HasValue)
+                this.DrawPixelLine(b, previous.Value, point, Game1.textColor * 0.72f, 2f);
+            previous = point;
+        }
+
+        int current = points[^1].MarketUnitPrice;
+        Utility.drawTextWithShadow(
+            b,
+            I18n.Get("exchange.position_chart_current", new { current, risk = linePrice }),
+            Game1.smallFont,
+            new Vector2(chart.X + 10, chart.Bottom - 30),
+            Game1.textColor * 0.78f
+        );
     }
 
     private void DrawCreateContractPage(SpriteBatch b)
@@ -1164,6 +1532,318 @@ public class ExchangeMenu : IClickableMenu
                 b.Draw(Game1.staminaRect, new Rectangle(track.X, thumbY, track.Width, thumbHeight), Color.SaddleBrown * 0.45f);
             }
         }
+    }
+
+
+    private void DrawDeliveryModal(SpriteBatch b)
+    {
+        ExchangePosition? position = this.FindPositionByContractId(this.deliveryModalContractId);
+        if (position is null)
+        {
+            this.CloseDeliveryModal();
+            return;
+        }
+
+        ExchangeService.DeliveryPreview preview = this.exchangeService.GetDeliveryPreview(position);
+
+        b.Draw(Game1.staminaRect, new Rectangle(0, 0, Game1.uiViewport.Width, Game1.uiViewport.Height), Color.Black * 0.45f);
+
+        Rectangle box = this.GetDeliveryModalBox();
+        IClickableMenu.drawTextureBox(b, box.X, box.Y, box.Width, box.Height, Color.White);
+
+        bool isDefault = this.deliveryModalKind == DeliveryModalKind.DeliveryDefault;
+        bool isLong = this.deliveryModalKind == DeliveryModalKind.LongDelivery;
+        bool isShort = this.deliveryModalKind == DeliveryModalKind.ShortDelivery;
+
+        string title = isDefault
+            ? I18n.Get("exchange.delivery_modal_default_title")
+            : I18n.Get("exchange.delivery_modal_title");
+
+        Utility.drawTextWithShadow(
+            b,
+            title,
+            Game1.dialogueFont,
+            new Vector2(box.X + 36, box.Y + 26),
+            isDefault ? Color.DarkRed : Game1.textColor
+        );
+
+        Rectangle slot = new(box.X + 46, box.Y + 98, 86, 86);
+        this.DrawDeliveryItemSlot(b, position, slot, preview.Quantity);
+
+        int labelX = box.X + 160;
+        int valueX = box.X + 378;
+        int y = box.Y + 98;
+        const int row = 28;
+
+        this.DrawLabelValue(b, I18n.Get("exchange.confirm_contract"), position.ContractId, labelX, valueX, y);
+        y += row;
+        this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_goods"), I18n.Get("exchange.delivery_modal_goods_value", new { name = this.GetPositionDisplayName(position), quantity = preview.Quantity }), labelX, valueX, y);
+        y += row;
+        this.DrawLabelValue(b, I18n.Get("exchange.label_price"), I18n.Get("exchange.value_gold", new { amount = preview.DeliveryPrice }), labelX, valueX, y);
+        y += row;
+
+        if (isLong)
+        {
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_pay"), I18n.Get("exchange.value_gold", new { amount = preview.DeliveryValue }), labelX, valueX, y);
+            y += row;
+            Utility.drawTextWithShadow(
+                b,
+                I18n.Get("exchange.delivery_modal_long_note"),
+                Game1.smallFont,
+                new Vector2(labelX, y + 12),
+                Game1.textColor * 0.82f
+            );
+        }
+        else if (isShort)
+        {
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_stored"), I18n.Get("exchange.delivery_storage_value", new { stored = preview.StoredQuantity, required = preview.Quantity }), labelX, valueX, y);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_receive"), I18n.Get("exchange.value_gold", new { amount = preview.DeliveryValue }), labelX, valueX, y);
+            y += row;
+            Utility.drawTextWithShadow(
+                b,
+                I18n.Get("exchange.delivery_modal_short_note"),
+                Game1.smallFont,
+                new Vector2(labelX, y + 12),
+                Game1.textColor * 0.82f
+            );
+        }
+        else
+        {
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_stored"), I18n.Get("exchange.delivery_storage_value", new { stored = preview.StoredQuantity, required = preview.Quantity }), labelX, valueX, y);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_shortage"), I18n.Get("exchange.delivery_modal_goods_value", new { name = this.GetPositionDisplayName(position), quantity = preview.ShortageQuantity }), labelX, valueX, y, Color.DarkRed);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_shortage_value"), I18n.Get("exchange.value_gold", new { amount = preview.ShortageValue }), labelX, valueX, y);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_fixed_fee"), I18n.Get("exchange.value_gold", new { amount = preview.FixedFee }), labelX, valueX, y);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_penalty"), I18n.Get("exchange.value_gold", new { amount = preview.Penalty }), labelX, valueX, y);
+            y += row;
+            this.DrawLabelValue(b, I18n.Get("exchange.delivery_modal_default_cost"), I18n.Get("exchange.value_gold", new { amount = preview.DefaultCost }), labelX, valueX, y, Color.DarkRed);
+        }
+
+        (Rectangle confirm, Rectangle cancel) = this.GetDeliveryModalButtons(box);
+        string confirmLabel = isDefault
+            ? I18n.Get("exchange.delivery_default_confirm_button")
+            : I18n.Get("exchange.delivery_modal_confirm");
+
+        this.DrawButton(b, confirm, confirmLabel, selected: true, enabled: true);
+        this.DrawButton(b, cancel, I18n.Get("exchange.confirm_cancel"));
+    }
+
+    private void DrawDeliveryItemSlot(SpriteBatch b, ExchangePosition position, Rectangle slot, int quantity)
+    {
+        b.Draw(Game1.staminaRect, slot, Color.White * 0.45f);
+        this.DrawRectangleOutline(b, slot, 2, Color.Black * 0.45f);
+
+        Item? item = this.CreateDeliveryPreviewItem(position, quantity);
+        if (item is not null)
+        {
+            item.drawInMenu(
+                b,
+                new Vector2(slot.X + 11, slot.Y + 10),
+                1f,
+                1f,
+                0.92f,
+                StackDrawType.Draw,
+                Color.White,
+                true
+            );
+            return;
+        }
+
+        this.DrawCenteredText(b, this.GetPositionDisplayName(position), slot, Game1.textColor);
+    }
+
+    private Item? CreateDeliveryPreviewItem(ExchangePosition position, int quantity)
+    {
+        if (position is null || string.IsNullOrWhiteSpace(position.ItemId))
+            return null;
+
+        try
+        {
+            Item item = ItemRegistry.Create(position.ItemId);
+            this.ApplyArtisanIdentityToItem(item, position);
+            item.Stack = Math.Max(1, Math.Min(999, quantity));
+            if (item is StardewValley.Object obj)
+                obj.Quality = 0;
+            return item;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string GetPositionDisplayName(ExchangePosition position)
+    {
+        ExchangeContractSpec? spec = this.catalog.FirstOrDefault(spec => string.Equals(spec.MarketCommodityKey, position.MarketCommodityKey, StringComparison.OrdinalIgnoreCase));
+        if (spec is not null && !string.IsNullOrWhiteSpace(spec.DisplayName))
+            return spec.DisplayName;
+
+        Item? item = this.CreateDeliveryPreviewItem(position, 1);
+        if (item is not null && !string.IsNullOrWhiteSpace(item.DisplayName))
+            return item.DisplayName;
+
+        return position.DisplayName;
+    }
+
+    private static bool IsFlavoredArtisanPosition(ExchangePosition position)
+    {
+        return position is not null
+            && !string.IsNullOrWhiteSpace(position.ParentItemId)
+            && !string.IsNullOrWhiteSpace(position.MarketCommodityKey)
+            && position.MarketCommodityKey.StartsWith("Artisan:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ApplyArtisanIdentityToItem(Item item, ExchangePosition position)
+    {
+        if (item is null || !IsFlavoredArtisanPosition(position))
+            return;
+
+        string? preserveType = TryReadPreserveTypeFromMarketKey(position.MarketCommodityKey);
+        int? parentIndex = TryReadObjectIndex(position.ParentItemId);
+
+        if (string.IsNullOrWhiteSpace(preserveType) || parentIndex is null)
+            return;
+
+        TryWriteMemberValue(item, "preserve", preserveType);
+        TryWriteMemberValue(item, "preservedParentSheetIndex", parentIndex.Value);
+    }
+
+    private static string? TryReadPreserveTypeFromMarketKey(string marketCommodityKey)
+    {
+        if (string.IsNullOrWhiteSpace(marketCommodityKey))
+            return null;
+
+        string[] parts = marketCommodityKey.Split(':');
+        return parts.Length >= 3 ? parts[1] : null;
+    }
+
+    private static int? TryReadObjectIndex(string qualifiedItemId)
+    {
+        if (string.IsNullOrWhiteSpace(qualifiedItemId))
+            return null;
+
+        string digits = new(qualifiedItemId.Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out int parsed) ? parsed : null;
+    }
+
+    private static void TryWriteMemberValue(Item item, string memberName, object value)
+    {
+        Type? type = item.GetType();
+
+        while (type is not null)
+        {
+            FieldInfo? field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field is not null)
+            {
+                if (TryWriteNetFieldValue(field.GetValue(item), value))
+                    return;
+
+                object? converted = TryConvertMemberValue(field.FieldType, value);
+                if (converted is not null)
+                {
+                    field.SetValue(item, converted);
+                    return;
+                }
+            }
+
+            PropertyInfo? property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property is not null && property.GetIndexParameters().Length == 0)
+            {
+                object? currentValue = null;
+                try { currentValue = property.GetValue(item); } catch { }
+
+                if (TryWriteNetFieldValue(currentValue, value))
+                    return;
+
+                if (property.CanWrite)
+                {
+                    object? converted = TryConvertMemberValue(property.PropertyType, value);
+                    if (converted is not null)
+                    {
+                        property.SetValue(item, converted);
+                        return;
+                    }
+                }
+            }
+
+            type = type.BaseType;
+        }
+    }
+
+    private static bool TryWriteNetFieldValue(object? target, object value)
+    {
+        if (target is null)
+            return false;
+
+        PropertyInfo? valueProperty = target.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (valueProperty is null || !valueProperty.CanWrite)
+            return false;
+
+        object? converted = TryConvertMemberValue(valueProperty.PropertyType, value);
+        if (converted is null)
+            return false;
+
+        valueProperty.SetValue(target, converted);
+        return true;
+    }
+
+    private static object? TryConvertMemberValue(Type targetType, object value)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        try
+        {
+            if (effectiveType == typeof(string))
+                return value.ToString();
+
+            if (effectiveType == typeof(int))
+                return Convert.ToInt32(value);
+
+            if (effectiveType.IsEnum)
+            {
+                string? text = value.ToString();
+                if (!string.IsNullOrWhiteSpace(text) && Enum.TryParse(effectiveType, text, ignoreCase: true, out object? parsed))
+                    return parsed;
+            }
+
+            if (effectiveType.IsInstanceOfType(value))
+                return value;
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private Rectangle GetDeliveryModalBox()
+    {
+        int boxWidth = Math.Min(820, Math.Max(680, Game1.uiViewport.Width - 180));
+        int boxHeight = 430;
+        return new Rectangle(
+            (Game1.uiViewport.Width - boxWidth) / 2,
+            (Game1.uiViewport.Height - boxHeight) / 2,
+            boxWidth,
+            boxHeight
+        );
+    }
+
+    private (Rectangle Confirm, Rectangle Cancel) GetDeliveryModalButtons(Rectangle box)
+    {
+        int buttonWidth = 160;
+        int buttonHeight = 44;
+        int gap = 28;
+        int y = box.Bottom - 72;
+        int x = box.X + (box.Width - buttonWidth * 2 - gap) / 2;
+        return (
+            new Rectangle(x, y, buttonWidth, buttonHeight),
+            new Rectangle(x + buttonWidth + gap, y, buttonWidth, buttonHeight)
+        );
     }
 
 
@@ -1762,6 +2442,9 @@ public class ExchangeMenu : IClickableMenu
         );
         Rectangle topUpButton = new(detailBounds.X, detailBounds.Bottom - 48, 180, 42);
         Rectangle closePositionButton = new(topUpButton.Right + 18, detailBounds.Bottom - 48, 150, 42);
+        Rectangle depositDeliveryButton = new(detailBounds.X, detailBounds.Bottom - 48, 180, 42);
+        Rectangle executeDeliveryButton = new(depositDeliveryButton.Right + 18, detailBounds.Bottom - 48, 150, 42);
+        Rectangle claimDeliveryButton = new(detailBounds.X, detailBounds.Bottom - 48, 180, 42);
 
         return new PositionsLayout
         {
@@ -1771,7 +2454,10 @@ public class ExchangeMenu : IClickableMenu
             DownButton = downButton,
             DetailBounds = detailBounds,
             TopUpButton = topUpButton,
-            ClosePositionButton = closePositionButton
+            ClosePositionButton = closePositionButton,
+            DepositDeliveryButton = depositDeliveryButton,
+            ExecuteDeliveryButton = executeDeliveryButton,
+            ClaimDeliveryButton = claimDeliveryButton
         };
     }
 
@@ -1829,12 +2515,40 @@ public class ExchangeMenu : IClickableMenu
 
     private List<ExchangePosition> GetSortedPositions()
     {
-        return this.exchangeService.GetPositions()
+        List<ExchangePosition> all = this.exchangeService.GetPositions().ToList();
+        List<ExchangePosition> active = all
+            .Where(position => !this.IsTerminalPosition(position))
+            .ToList();
+        List<ExchangePosition> recentTerminal = all
+            .Where(this.IsTerminalPosition)
+            .OrderByDescending(this.GetPositionActivityDateIndex)
+            .ThenByDescending(position => position.ContractId)
+            .Take(5)
+            .ToList();
+
+        return active
+            .Concat(recentTerminal)
             .OrderBy(position => this.GetPositionSortPriority(position))
             .ThenBy(position => Math.Max(0, position.ExpiryDateIndex))
             .ThenBy(position => Math.Max(0, position.OpenDateIndex))
             .ThenBy(position => position.ContractId)
             .ToList();
+    }
+
+    private bool IsTerminalPosition(ExchangePosition position)
+    {
+        return string.Equals(position.Status, ExchangePosition.StatusForcedLiquidated, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(position.Status, ExchangePosition.StatusClosed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(position.Status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(position.Status, ExchangePosition.StatusDeliveryDefault, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int GetPositionActivityDateIndex(ExchangePosition position)
+    {
+        return Math.Max(
+            Math.Max(position.ForcedLiquidationDateIndex, position.ExpiryDateIndex),
+            position.OpenDateIndex
+        );
     }
 
     private int GetPositionSortPriority(ExchangePosition position)
@@ -1866,12 +2580,94 @@ public class ExchangeMenu : IClickableMenu
         return 70;
     }
 
+    private void OpenDeliveryModal(ExchangePosition position)
+    {
+        if (position is null)
+            return;
+
+        this.deliveryModalContractId = position.ContractId;
+        if (string.Equals(position.Direction, ExchangePosition.DirectionLong, StringComparison.OrdinalIgnoreCase))
+            this.deliveryModalKind = DeliveryModalKind.LongDelivery;
+        else if (this.NeedsDeliveryDefaultConfirmation(position))
+            this.deliveryModalKind = DeliveryModalKind.DeliveryDefault;
+        else
+            this.deliveryModalKind = DeliveryModalKind.ShortDelivery;
+
+        Game1.playSound("smallSelect");
+    }
+
+    private void CloseDeliveryModal()
+    {
+        this.deliveryModalKind = DeliveryModalKind.None;
+        this.deliveryModalContractId = string.Empty;
+    }
+
+    private ExchangePosition? FindPositionByContractId(string contractId)
+    {
+        if (string.IsNullOrWhiteSpace(contractId))
+            return null;
+
+        return this.exchangeService.GetPositions().FirstOrDefault(position =>
+            string.Equals(position.ContractId, contractId, StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    private void SelectPositionByContractId(string contractId)
+    {
+        List<ExchangePosition> positions = this.GetSortedPositions();
+        int index = positions.FindIndex(position => string.Equals(position.ContractId, contractId, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return;
+
+        this.selectedPositionIndex = index;
+        this.EnsurePositionSelectionVisible(positions.Count);
+    }
+
+
     private bool CanClosePositionForUi(ExchangePosition position)
     {
         if (position is null || !position.IsOpenLike())
             return false;
 
         return this.GetDaysLeft(position) > 0;
+    }
+
+    private bool CanDepositDeliveryForUi(ExchangePosition position)
+    {
+        return position is not null
+            && string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(position.Direction, ExchangePosition.DirectionShort, StringComparison.OrdinalIgnoreCase)
+            && this.exchangeService.GetDeliveryStorageQuantity(position) < Math.Max(0, position.TotalQuantity);
+    }
+
+    private bool CanExecuteDeliveryForUi(ExchangePosition position)
+    {
+        return position is not null
+            && string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool NeedsDeliveryDefaultConfirmation(ExchangePosition position)
+    {
+        return position is not null
+            && string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(position.Direction, ExchangePosition.DirectionShort, StringComparison.OrdinalIgnoreCase)
+            && this.exchangeService.GetDeliveryStorageQuantity(position) < Math.Max(0, position.TotalQuantity);
+    }
+
+    private bool CanClaimDeliveryForUi(ExchangePosition position)
+    {
+        return position is not null
+            && string.Equals(position.Status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(position.Direction, ExchangePosition.DirectionLong, StringComparison.OrdinalIgnoreCase)
+            && this.exchangeService.GetDeliveryStorageQuantity(position) > 0;
+    }
+
+    private bool ShouldShowDeliveryStorageRow(ExchangePosition position)
+    {
+        return position is not null
+            && (string.Equals(position.Status, ExchangePosition.StatusPendingDelivery, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(position.Status, ExchangePosition.StatusDelivered, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(position.Status, ExchangePosition.StatusDeliveryDefault, StringComparison.OrdinalIgnoreCase));
     }
 
     private int GetPositionDisplayPrice(ExchangePosition position)
@@ -2328,8 +3124,9 @@ public class ExchangeMenu : IClickableMenu
 
     private static int CalculateLiquidationPrice(int openPrice, string direction)
     {
-        double factor = direction == ExchangePosition.DirectionShort ? 1.20 : 0.80;
-        return Math.Max(0, (int)Math.Round(openPrice * factor, MidpointRounding.AwayFromZero));
+        // In Reality Check 1.4, the displayed risk line is the 12% maintenance-margin line.
+        // With 20% initial margin and 12% maintenance margin, the price gap from open is 8%.
+        return CalculateWarningPrice(openPrice, direction);
     }
 
     private static int KeyToDigit(Keys key)

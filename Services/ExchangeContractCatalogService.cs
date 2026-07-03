@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using RealityCheck.Models;
 using StardewModdingAPI;
 using StardewValley;
@@ -32,10 +33,20 @@ public class ExchangeContractCatalogService
 
     private static readonly HashSet<string> ExcludedGenericArtisanItemIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "(O)348", // Wine: generic wine without a parent fruit has no meaningful exchange chart.
+        "(O)342", // Pickles: generic template without parent crop.
+        "342",
+        "(O)344", // Jelly: generic template without parent fruit.
+        "344",
+        "(O)348", // Wine: generic template without parent fruit.
         "348",
-        "(O)350", // Juice: generic juice without a parent vegetable has no meaningful exchange chart.
-        "350"
+        "(O)350", // Juice: generic template without parent vegetable.
+        "350",
+        "(O)SmokedFish",
+        "SmokedFish",
+        "(O)DriedMushrooms",
+        "DriedMushrooms",
+        "(O)DriedFruit",
+        "DriedFruit"
     };
 
     private readonly MarketPriceService marketPriceService;
@@ -154,7 +165,7 @@ public class ExchangeContractCatalogService
 
     private ExchangeContractSpec ToContractSpec(MarketPriceTableEntry entry)
     {
-        Item? item = entry.IconItem ?? TryCreateItem(entry.ItemId);
+        Item? item = CreateDisplayItem(entry) ?? entry.IconItem ?? TryCreateItem(entry.ItemId);
         string category = ResolveExchangeCategory(entry, item);
         bool isRawCrop = category is "Fruit" or "Vegetable";
         int marketUnitPrice = Math.Max(0, (int)Math.Round(entry.MarketUnitPrice));
@@ -165,7 +176,7 @@ public class ExchangeContractCatalogService
             MarketCommodityKey = entry.MarketCommodityKey,
             ItemId = entry.ItemId,
             ParentItemId = entry.ParentItemId,
-            DisplayName = entry.ItemName,
+            DisplayName = ResolveDisplayName(entry, item),
             Category = category,
             MarketUnitPrice = marketUnitPrice,
             QuantityPerLot = ExchangeService.DefaultQuantityPerLot,
@@ -238,6 +249,148 @@ public class ExchangeContractCatalogService
                 && entry.MarketCommodityKey.StartsWith("Artisan:", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(entry.ParentItemId)
             );
+    }
+
+    private static string ResolveDisplayName(MarketPriceTableEntry entry, Item? item)
+    {
+        if (item is not null && !string.IsNullOrWhiteSpace(item.DisplayName))
+            return item.DisplayName;
+
+        return entry.ItemName;
+    }
+
+    private static Item? CreateDisplayItem(MarketPriceTableEntry entry)
+    {
+        if (entry is null || string.IsNullOrWhiteSpace(entry.ItemId))
+            return null;
+
+        Item? item = TryCreateItem(entry.ItemId);
+        if (item is null)
+            return null;
+
+        ApplyArtisanIdentityToItem(item, entry.MarketCommodityKey, entry.ParentItemId);
+        return item;
+    }
+
+    private static void ApplyArtisanIdentityToItem(Item item, string marketCommodityKey, string parentItemId)
+    {
+        if (item is null || string.IsNullOrWhiteSpace(parentItemId) || string.IsNullOrWhiteSpace(marketCommodityKey))
+            return;
+
+        if (!marketCommodityKey.StartsWith("Artisan:", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        string? preserveType = TryReadPreserveTypeFromMarketKey(marketCommodityKey);
+        int? parentIndex = TryReadObjectIndex(parentItemId);
+
+        if (string.IsNullOrWhiteSpace(preserveType) || parentIndex is null)
+            return;
+
+        TryWriteMemberValue(item, "preserve", preserveType);
+        TryWriteMemberValue(item, "preservedParentSheetIndex", parentIndex.Value);
+    }
+
+    private static string? TryReadPreserveTypeFromMarketKey(string marketCommodityKey)
+    {
+        string[] parts = marketCommodityKey.Split(':');
+        return parts.Length >= 3 ? parts[1] : null;
+    }
+
+    private static int? TryReadObjectIndex(string qualifiedItemId)
+    {
+        string digits = new((qualifiedItemId ?? string.Empty).Where(char.IsDigit).ToArray());
+        return int.TryParse(digits, out int parsed) ? parsed : null;
+    }
+
+    private static void TryWriteMemberValue(Item item, string memberName, object value)
+    {
+        Type? type = item.GetType();
+
+        while (type is not null)
+        {
+            FieldInfo? field = type.GetField(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (field is not null)
+            {
+                if (TryWriteNetFieldValue(field.GetValue(item), value))
+                    return;
+
+                object? converted = TryConvertMemberValue(field.FieldType, value);
+                if (converted is not null)
+                {
+                    field.SetValue(item, converted);
+                    return;
+                }
+            }
+
+            PropertyInfo? property = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (property is not null && property.GetIndexParameters().Length == 0)
+            {
+                object? currentValue = null;
+                try { currentValue = property.GetValue(item); } catch { }
+
+                if (TryWriteNetFieldValue(currentValue, value))
+                    return;
+
+                if (property.CanWrite)
+                {
+                    object? converted = TryConvertMemberValue(property.PropertyType, value);
+                    if (converted is not null)
+                    {
+                        property.SetValue(item, converted);
+                        return;
+                    }
+                }
+            }
+
+            type = type.BaseType;
+        }
+    }
+
+    private static bool TryWriteNetFieldValue(object? target, object value)
+    {
+        if (target is null)
+            return false;
+
+        PropertyInfo? valueProperty = target.GetType().GetProperty("Value", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (valueProperty is null || !valueProperty.CanWrite)
+            return false;
+
+        object? converted = TryConvertMemberValue(valueProperty.PropertyType, value);
+        if (converted is null)
+            return false;
+
+        valueProperty.SetValue(target, converted);
+        return true;
+    }
+
+    private static object? TryConvertMemberValue(Type targetType, object value)
+    {
+        Type effectiveType = Nullable.GetUnderlyingType(targetType) ?? targetType;
+
+        try
+        {
+            if (effectiveType == typeof(string))
+                return value.ToString();
+
+            if (effectiveType == typeof(int))
+                return Convert.ToInt32(value);
+
+            if (effectiveType.IsEnum)
+            {
+                string? text = value.ToString();
+                if (!string.IsNullOrWhiteSpace(text) && Enum.TryParse(effectiveType, text, ignoreCase: true, out object? parsed))
+                    return parsed;
+            }
+
+            if (effectiveType.IsInstanceOfType(value))
+                return value;
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static Item? TryCreateItem(string itemId)

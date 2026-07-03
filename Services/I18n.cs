@@ -70,6 +70,11 @@ public static class I18n
             "Expense Offset" => Get("category.expense_offset"),
             "Unpaid Obligation" => Get("category.unpaid_obligation"),
             "Outstanding Balance" => Get("category.outstanding_balance"),
+            "Exchange Transfer" => Get("category.exchange_transfer"),
+            "Transfer to Exchange Account" => Get("category.exchange_transfer_to"),
+            "Transfer from Exchange Account" => Get("category.exchange_transfer_from"),
+            "Exchange Debt" => Get("category.exchange_debt"),
+            "Exchange Debt Collection" => Get("category.exchange_debt_collection"),
             _ => category
         };
     }

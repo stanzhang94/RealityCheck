@@ -2196,7 +2196,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         return languageCode switch
         {
             "zh" => 1.00f,
-            "en" => 0.65f,
+            "en" => 0.75f,
             "ja" => 0.80f,
             "ko" => 0.65f,
             "pt" => 0.82f,

@@ -46,12 +46,16 @@ public class ExchangeMenu : IClickableMenu
 
     private readonly ExchangeService exchangeService;
     private readonly ExchangeContractCatalogService? catalogService;
+    private readonly LedgerService? ledgerService;
+    private readonly AnalyticsService? analyticsService;
+    private readonly MarketPriceService? marketPriceService;
     private readonly List<ExchangeContractSpec> catalog;
     private readonly Dictionary<CommodityFilter, List<ExchangeContractSpec>> filteredCatalogs;
 
     private readonly Rectangle accountPageButton;
     private readonly Rectangle createPageButton;
     private readonly Rectangle positionsPageButton;
+    private readonly Rectangle manualButton;
     private readonly Rectangle closeButton;
 
     private readonly Rectangle transferInputBox;
@@ -157,7 +161,10 @@ public class ExchangeMenu : IClickableMenu
 
     public ExchangeMenu(
         ExchangeService exchangeService,
-        ExchangeContractCatalogService? catalogService = null
+        ExchangeContractCatalogService? catalogService = null,
+        LedgerService? ledgerService = null,
+        AnalyticsService? analyticsService = null,
+        MarketPriceService? marketPriceService = null
     )
         : base(
             (Game1.uiViewport.Width - GetPreferredMenuWidth()) / 2,
@@ -169,6 +176,9 @@ public class ExchangeMenu : IClickableMenu
     {
         this.exchangeService = exchangeService;
         this.catalogService = catalogService;
+        this.ledgerService = ledgerService;
+        this.analyticsService = analyticsService;
+        this.marketPriceService = marketPriceService;
         this.catalog = catalogService?.GetContractCatalog() ?? new List<ExchangeContractSpec>();
         this.filteredCatalogs = this.BuildFilteredCatalogCache(this.catalog);
 
@@ -177,6 +187,7 @@ public class ExchangeMenu : IClickableMenu
         this.createPageButton = new Rectangle(this.accountPageButton.Right + 14, tabY, 140, 48);
         this.positionsPageButton = new Rectangle(this.createPageButton.Right + 14, tabY, 160, 48);
         this.closeButton = new Rectangle(this.xPositionOnScreen + this.width - 92, this.yPositionOnScreen + 38, 48, 48);
+        this.manualButton = new Rectangle(this.closeButton.X - 60, this.closeButton.Y, 48, 48);
 
         int transferX = this.xPositionOnScreen + this.width - 390;
         int transferY = this.yPositionOnScreen + 218;
@@ -244,6 +255,12 @@ public class ExchangeMenu : IClickableMenu
         if (this.confirmCreateOpen)
         {
             this.HandleConfirmClick(x, y);
+            return;
+        }
+
+        if (this.manualButton.Contains(x, y))
+        {
+            this.ReturnToFinanceManual(playSound);
             return;
         }
 
@@ -346,6 +363,26 @@ public class ExchangeMenu : IClickableMenu
         base.receiveScrollWheelAction(direction);
     }
 
+
+    private void ReturnToFinanceManual(bool playSound)
+    {
+        if (this.ledgerService is null || this.analyticsService is null || this.marketPriceService is null)
+        {
+            Game1.exitActiveMenu();
+            return;
+        }
+
+        Game1.activeClickableMenu = new FinanceMenu(
+            this.ledgerService,
+            this.analyticsService,
+            this.marketPriceService,
+            this.exchangeService,
+            this.catalogService
+        );
+
+        if (playSound)
+            Game1.playSound("bigSelect");
+    }
 
     private void HandleAccountClick(int x, int y)
     {
@@ -693,6 +730,7 @@ public class ExchangeMenu : IClickableMenu
         );
 
         this.DrawPageTabs(b);
+        this.DrawButton(b, this.manualButton, "<");
         this.DrawButton(b, this.closeButton, I18n.Get("ui.close_x"));
 
         if (this.currentPage == ExchangePage.Account)

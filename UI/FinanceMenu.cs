@@ -74,6 +74,43 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 
     private const int MarketPriceRowsStartOffset = 134;
 
+    private static int GetPreferredMenuWidth()
+    {
+        int availableWidth = Math.Max(800, Game1.uiViewport.Width - 40);
+        return Math.Min(1440, availableWidth);
+    }
+
+    private static int GetPreferredMenuHeight()
+    {
+        int availableHeight = Math.Max(600, Game1.uiViewport.Height - 40);
+        return Math.Min(900, availableHeight);
+    }
+
+    private static int GetMenuX()
+    {
+        return (Game1.uiViewport.Width - GetPreferredMenuWidth()) / 2;
+    }
+
+    private static int GetMenuY()
+    {
+        return Math.Max(12, (Game1.uiViewport.Height - GetPreferredMenuHeight()) / 2);
+    }
+
+    private static int GetContentWidth()
+    {
+        return GetPreferredMenuWidth() - 120;
+    }
+
+    private static int GetTwoColumnOffset()
+    {
+        return Math.Clamp(GetContentWidth() / 2 + 20, 360, 620);
+    }
+
+    private static int GetChartWidth()
+    {
+        return Math.Clamp(GetContentWidth() - 20, 620, 1050);
+    }
+
     private enum ReportTab
     {
         Daily,
@@ -109,15 +146,17 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         this.exchangeService = exchangeService;
         this.exchangeContractCatalogService = exchangeContractCatalogService;
 
-        int x = Game1.uiViewport.Width / 2 - 400;
-        int y = Game1.uiViewport.Height / 2 - 300;
+        int x = GetMenuX();
+        int y = GetMenuY();
+        int width = GetPreferredMenuWidth();
 
-        this.dailyTab = new Rectangle(x + 35, y + 25, 105, 55);
-        this.seasonalTab = new Rectangle(x + 145, y + 25, 130, 55);
-        this.annualTab = new Rectangle(x + 280, y + 25, 115, 55);
-        this.taxTab = new Rectangle(x + 400, y + 25, 145, 55);
-        this.marketTab = new Rectangle(x + 550, y + 25, 190, 55);
-        this.exchangeButton = new Rectangle(x + 540, y + 104, 205, 34);
+        int tabY = y + 105;
+        this.dailyTab = new Rectangle(x + 60, tabY, 110, 48);
+        this.seasonalTab = new Rectangle(this.dailyTab.Right + 14, tabY, 140, 48);
+        this.annualTab = new Rectangle(this.seasonalTab.Right + 14, tabY, 130, 48);
+        this.taxTab = new Rectangle(this.annualTab.Right + 14, tabY, 150, 48);
+        this.marketTab = new Rectangle(this.taxTab.Right + 14, tabY, 185, 48);
+        this.exchangeButton = new Rectangle(x + width - 265, y + 64, 205, 34);
     }
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
@@ -356,7 +395,10 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         this.SetMarketPriceSearchFocused(false);
         Game1.activeClickableMenu = new ExchangeMenu(
             this.exchangeService,
-            this.exchangeContractCatalogService
+            this.exchangeContractCatalogService,
+            this.ledgerService,
+            this.analyticsService,
+            this.marketPriceService
         );
 
         if (playSound)
@@ -370,21 +412,7 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
         if (this.exchangeService is null)
             return;
 
-        b.Draw(Game1.staminaRect, this.exchangeButton, Color.SaddleBrown * 0.12f);
-        b.Draw(
-            Game1.staminaRect,
-            new Rectangle(this.exchangeButton.X, this.exchangeButton.Y, 5, this.exchangeButton.Height),
-            Color.DarkGoldenrod * 0.82f
-        );
-        this.DrawRectangleOutline(b, this.exchangeButton, 1, Color.SaddleBrown * 0.46f);
-
-        Utility.drawTextWithShadow(
-            b,
-            I18n.Get("exchange.button"),
-            Game1.smallFont,
-            new Vector2(this.exchangeButton.X + 16, this.exchangeButton.Y + 7),
-            Game1.textColor
-        );
+        this.DrawTab(b, this.exchangeButton, I18n.Get("exchange.button"), false);
     }
 
     public override void receiveScrollWheelAction(int direction)
@@ -405,10 +433,10 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     {
         base.draw(b);
 
-        int x = Game1.uiViewport.Width / 2 - 400;
-        int y = Game1.uiViewport.Height / 2 - 300;
-        int width = 800;
-        int height = 600;
+        int x = GetMenuX();
+        int y = GetMenuY();
+        int width = GetPreferredMenuWidth();
+        int height = GetPreferredMenuHeight();
 
         this.contentTop = y + 170;
         this.contentBottom = y + height - 45;
@@ -423,16 +451,16 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
             Color.White
         );
 
-        this.DrawTabs(b);
-        this.DrawExchangeButton(b);
-
         Utility.drawTextWithShadow(
             b,
             I18n.Get("mod.name"),
             Game1.dialogueFont,
-            new Vector2(x + 60, y + 105),
+            new Vector2(x + 60, y + 55),
             Game1.textColor
         );
+
+        this.DrawTabs(b);
+        this.DrawExchangeButton(b);
 
         int contentX = x + 70;
         int contentY = this.contentStartY - this.scrollOffset;
@@ -548,22 +576,19 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 
     private void DrawTab(SpriteBatch b, Rectangle rect, string label, bool active)
     {
-        Color color = active ? Color.White : Color.LightGray;
+        Color backgroundColor = active ? Color.Wheat * 0.60f : Color.White * 0.30f;
+        b.Draw(Game1.staminaRect, rect, backgroundColor);
+        this.DrawRectangleOutline(b, rect, active ? 3 : 2, Color.Black * 0.45f);
 
-        IClickableMenu.drawTextureBox(
-            b,
-            rect.X,
-            rect.Y,
-            rect.Width,
-            rect.Height,
-            color
-        );
-
+        Vector2 size = Game1.smallFont.MeasureString(label);
         Utility.drawTextWithShadow(
             b,
             label,
             Game1.smallFont,
-            new Vector2(rect.X + 15, rect.Y + 16),
+            new Vector2(
+                rect.X + (rect.Width - size.X) / 2f,
+                rect.Y + (rect.Height - size.Y) / 2f + 2f
+            ),
             Game1.textColor
         );
     }
@@ -732,8 +757,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         if (y < this.contentTop || y > this.contentBottom)
             return false;
 
-        int menuX = Game1.uiViewport.Width / 2 - 400;
-        int menuY = Game1.uiViewport.Height / 2 - 300;
+        int menuX = GetMenuX();
+        int menuY = GetMenuY();
         int contentX = menuX + 70;
         int firstRowY = menuY + 180 - this.scrollOffset + MarketPriceRowsStartOffset;
 
@@ -768,8 +793,9 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             return true;
         }
 
+        MarketPriceColumnLayout layout = this.GetMarketPriceColumnLayout(contentX);
         int rowLeft = contentX + 24;
-        int rowRight = contentX + 690;
+        int rowRight = layout.RowRight;
 
         if (x < rowLeft || x > rowRight)
             return false;
@@ -1074,23 +1100,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
     private void DrawMarketPriceHistoryReport(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
     {
         this.marketPriceBackBounds = new Rectangle(x, y - 8, 125, 42);
-
-        IClickableMenu.drawTextureBox(
-            b,
-            this.marketPriceBackBounds.X,
-            this.marketPriceBackBounds.Y,
-            this.marketPriceBackBounds.Width,
-            this.marketPriceBackBounds.Height,
-            Color.White
-        );
-
-        Utility.drawTextWithShadow(
-            b,
-            I18n.Get("market_price.history_back"),
-            Game1.smallFont,
-            new Vector2(x + 34, y + 2),
-            Game1.textColor
-        );
+        this.DrawTab(b, this.marketPriceBackBounds, I18n.Get("market_price.history_back"), false);
 
         y += 50;
 
@@ -1134,8 +1144,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             return;
         }
 
-        this.DrawMarketPriceHistoryChart(b, history.ToList(), x, y);
-        y += 315;
+        int chartBlockHeight = this.DrawMarketPriceHistoryChart(b, history.ToList(), x, y);
+        y += chartBlockHeight + 55;
 
         MarketPriceHistoryPoint first = history.First();
         MarketPriceHistoryPoint last = history.Last();
@@ -1162,11 +1172,12 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.UpdateContentHeight(y + 80);
     }
 
-    private void DrawMarketPriceHistoryChart(SpriteBatch b, List<MarketPriceHistoryPoint> history, int x, int y)
+    private int DrawMarketPriceHistoryChart(SpriteBatch b, List<MarketPriceHistoryPoint> history, int x, int y)
     {
-        int labelWidth = 70;
-        int chartWidth = 560;
-        int chartHeight = 230;
+        int labelWidth = 76;
+        int availableChartWidth = Math.Max(420, GetContentWidth() - labelWidth - 80);
+        int chartWidth = Math.Clamp(availableChartWidth, 520, 1120);
+        int chartHeight = Math.Clamp(GetPreferredMenuHeight() - 480, 300, 420);
 
         int left = x + labelWidth;
         int top = y;
@@ -1190,6 +1201,15 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             bottom,
             minValue,
             maxValue
+        );
+
+        this.DrawMarketPriceChartDateGrid(
+            b,
+            history,
+            left,
+            right,
+            top,
+            bottom
         );
 
         this.DrawLineSegment(
@@ -1258,6 +1278,52 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
                 this.chartColor
             );
         }
+
+        return chartHeight + 45;
+    }
+
+    private void DrawMarketPriceChartDateGrid(
+        SpriteBatch b,
+        List<MarketPriceHistoryPoint> history,
+        int left,
+        int right,
+        int top,
+        int bottom
+    )
+    {
+        if (history.Count <= 1)
+            return;
+
+        int chartWidth = right - left;
+        int tickCount = Math.Min(5, history.Count);
+
+        for (int i = 0; i < tickCount; i++)
+        {
+            int index = tickCount == 1
+                ? 0
+                : (int)Math.Round(i * (history.Count - 1) / (float)(tickCount - 1));
+
+            float x = left + chartWidth * index / (float)(history.Count - 1);
+
+            this.DrawLineSegment(
+                b,
+                new Vector2(x, top),
+                new Vector2(x, bottom),
+                1,
+                new Color(160, 135, 100) * 0.22f
+            );
+
+            string label = this.FormatHistoryDate(history[index]);
+            Vector2 labelSize = Game1.smallFont.MeasureString(label);
+
+            Utility.drawTextWithShadow(
+                b,
+                label,
+                Game1.smallFont,
+                new Vector2(x - labelSize.X / 2f, bottom + 12),
+                Game1.textColor
+            );
+        }
     }
 
     private void DrawMarketPriceChartGrid(
@@ -1270,7 +1336,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         int maxValue
     )
     {
-        const int tickCount = 5;
+        const int tickCount = 6;
 
         for (int i = 0; i < tickCount; i++)
         {
@@ -1346,7 +1412,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawMarketPriceSearchBox(SpriteBatch b, int x, int y)
     {
-        this.marketPriceSearchBounds = new Rectangle(x, y - 5, 635, 38);
+        this.marketPriceSearchBounds = new Rectangle(x, y - 5, Math.Max(635, GetContentWidth() - 30), 38);
 
         Color backgroundColor = string.IsNullOrWhiteSpace(this.marketPriceSearchText)
             ? Color.White * 0.22f
@@ -1378,53 +1444,101 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         );
     }
 
+    private readonly struct MarketPriceColumnLayout
+    {
+        public MarketPriceColumnLayout(int rowRight, int itemTextX, int itemColumnWidth, int numericStartX, int numericColumnWidth)
+        {
+            this.RowRight = rowRight;
+            this.ItemTextX = itemTextX;
+            this.ItemColumnWidth = itemColumnWidth;
+            this.NumericStartX = numericStartX;
+            this.NumericColumnWidth = numericColumnWidth;
+        }
+
+        public int RowRight { get; }
+
+        public int ItemTextX { get; }
+
+        public int ItemColumnWidth { get; }
+
+        public int NumericStartX { get; }
+
+        public int NumericColumnWidth { get; }
+
+        public int MarketColumnX => this.NumericStartX;
+
+        public int BaseColumnX => this.NumericStartX + this.NumericColumnWidth;
+
+        public int DailyColumnX => this.NumericStartX + this.NumericColumnWidth * 2;
+
+        public int TotalColumnX => this.NumericStartX + this.NumericColumnWidth * 3;
+    }
+
     private void DrawMarketPriceHeader(SpriteBatch b, int x, int y)
     {
-        this.marketPriceItemHeaderBounds = new Rectangle(x + 78, y - 5, 180, 35);
-        this.marketPriceMarketHeaderBounds = new Rectangle(x + 285, y - 5, 105, 35);
-        this.marketPriceBaseHeaderBounds = new Rectangle(x + 395, y - 5, 80, 35);
-        this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(x + 480, y - 5, 115, 35);
-        this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(x + 600, y - 5, 105, 35);
+        MarketPriceColumnLayout layout = this.GetMarketPriceColumnLayout(x);
+        float scale = this.GetBodyTextScale();
 
-        this.DrawLine(
+        this.marketPriceItemHeaderBounds = new Rectangle(layout.ItemTextX, y - 5, layout.ItemColumnWidth, 35);
+        this.marketPriceMarketHeaderBounds = new Rectangle(layout.MarketColumnX, y - 5, layout.NumericColumnWidth, 35);
+        this.marketPriceBaseHeaderBounds = new Rectangle(layout.BaseColumnX, y - 5, layout.NumericColumnWidth, 35);
+        this.marketPriceDailyMultiplierHeaderBounds = new Rectangle(layout.DailyColumnX, y - 5, layout.NumericColumnWidth, 35);
+        this.marketPriceTotalMultiplierHeaderBounds = new Rectangle(layout.TotalColumnX, y - 5, layout.NumericColumnWidth, 35);
+
+        this.DrawColoredText(
             b,
             I18n.Get("market_price.header_item") + this.GetMarketPriceSortLabel(MarketPriceSortMode.ItemName),
-            x + 78,
-            y
+            layout.ItemTextX,
+            y,
+            Game1.textColor,
+            scale
         );
 
-        this.DrawLine(
+        this.DrawCenteredColoredText(
             b,
             I18n.Get("market_price.header_market_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.MarketPrice),
-            x + 285,
-            y
+            layout.MarketColumnX,
+            layout.NumericColumnWidth,
+            y,
+            Game1.textColor,
+            scale
         );
 
-        this.DrawLine(
+        this.DrawCenteredColoredText(
             b,
             I18n.Get("market_price.header_base_price") + this.GetMarketPriceSortLabel(MarketPriceSortMode.BasePrice),
-            x + 395,
-            y
+            layout.BaseColumnX,
+            layout.NumericColumnWidth,
+            y,
+            Game1.textColor,
+            scale
         );
 
-        this.DrawLine(
+        this.DrawCenteredColoredText(
             b,
             I18n.Get("market_price.header_daily_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.DailyMultiplier),
-            x + 480,
-            y
+            layout.DailyColumnX,
+            layout.NumericColumnWidth,
+            y,
+            Game1.textColor,
+            scale
         );
 
-        this.DrawLine(
+        this.DrawCenteredColoredText(
             b,
             I18n.Get("market_price.header_total_multiplier") + this.GetMarketPriceSortLabel(MarketPriceSortMode.TotalMultiplier),
-            x + 600,
-            y
+            layout.TotalColumnX,
+            layout.NumericColumnWidth,
+            y,
+            Game1.textColor,
+            scale
         );
     }
 
     private void DrawMarketPriceLine(SpriteBatch b, MarketPriceTableEntry entry, int x, int y)
     {
-        this.DrawMarketPriceRowTextBackground(b, x, x + 690, y);
+        MarketPriceColumnLayout layout = this.GetMarketPriceColumnLayout(x);
+        this.DrawMarketPriceRowTextBackground(b, x, layout.RowRight, y);
 
         Rectangle favoriteBounds = this.GetMarketPriceFavoriteBounds(x, y);
         bool isFavorite = this.ledgerService.IsFavoriteMarketCommodity(entry.MarketCommodityKey);
@@ -1449,7 +1563,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
                     false
                 );
 
-                itemNameX = x + 78;
+                itemNameX = layout.ItemTextX;
             }
             catch
             {
@@ -1458,32 +1572,57 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         }
 
         float scale = this.GetBodyTextScale();
+        int itemNameWidth = Math.Max(80, layout.NumericStartX - itemNameX - 12);
+        string itemName = this.TrimTextToWidth(entry.ItemName, itemNameWidth, scale);
 
-        this.DrawColoredText(b, entry.ItemName, itemNameX, y, Game1.textColor, scale);
-        this.DrawColoredText(
+        this.DrawColoredText(b, itemName, itemNameX, y, Game1.textColor, scale);
+        this.DrawCenteredColoredText(
             b,
             this.FormatMarketUnitPrice(entry.MarketUnitPrice),
-            x + 285,
+            layout.MarketColumnX,
+            layout.NumericColumnWidth,
             y,
             Game1.textColor,
             scale
         );
-        this.DrawColoredText(b, $"{entry.BaseUnitPrice}g", x + 395, y, Game1.textColor, scale);
-        this.DrawColoredText(
+        this.DrawCenteredColoredText(b, $"{entry.BaseUnitPrice}g", layout.BaseColumnX, layout.NumericColumnWidth, y, Game1.textColor, scale);
+        this.DrawCenteredColoredText(
             b,
             this.FormatMultiplierPercent(entry.DailyMultiplier),
-            x + 480,
+            layout.DailyColumnX,
+            layout.NumericColumnWidth,
             y,
             this.GetMarketMultiplierColor(entry.DailyMultiplier),
             scale
         );
-        this.DrawColoredText(
+        this.DrawCenteredColoredText(
             b,
             this.FormatMultiplierPercent(entry.TotalMultiplier),
-            x + 600,
+            layout.TotalColumnX,
+            layout.NumericColumnWidth,
             y,
             this.GetMarketMultiplierColor(entry.TotalMultiplier),
             scale
+        );
+    }
+
+    private MarketPriceColumnLayout GetMarketPriceColumnLayout(int x)
+    {
+        int rowWidth = Math.Max(690, GetContentWidth() - 20);
+        int rowRight = x + rowWidth;
+        int itemTextX = x + 78;
+        int itemColumnWidth = Math.Clamp((int)(rowWidth * 0.38f), 260, 400);
+        int numericStartX = Math.Min(itemTextX + itemColumnWidth, rowRight - 360);
+        numericStartX = Math.Max(numericStartX, x + 320);
+        int numericWidth = Math.Max(360, rowRight - numericStartX);
+        int numericColumnWidth = Math.Max(84, numericWidth / 4);
+
+        return new MarketPriceColumnLayout(
+            rowRight,
+            itemTextX,
+            itemColumnWidth,
+            numericStartX,
+            numericColumnWidth
         );
     }
 
@@ -1563,6 +1702,47 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
             return Color.DarkRed;
 
         return Game1.textColor;
+    }
+
+    private void DrawCenteredColoredText(SpriteBatch b, string text, int x, int width, int y, Color color, float scale)
+    {
+        Vector2 size = Game1.smallFont.MeasureString(text) * scale;
+        float textX = x + Math.Max(0, width - size.X) / 2f;
+
+        b.DrawString(
+            Game1.smallFont,
+            text,
+            new Vector2(textX, y),
+            color,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            1f
+        );
+    }
+
+    private string TrimTextToWidth(string text, int maxWidth, float scale)
+    {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 0)
+            return string.Empty;
+
+        if (Game1.smallFont.MeasureString(text).X * scale <= maxWidth)
+            return text;
+
+        const string ellipsis = "...";
+        int length = text.Length;
+
+        while (length > 0)
+        {
+            string candidate = text[..length].TrimEnd() + ellipsis;
+            if (Game1.smallFont.MeasureString(candidate).X * scale <= maxWidth)
+                return candidate;
+
+            length--;
+        }
+
+        return ellipsis;
     }
 
     private void DrawColoredText(SpriteBatch b, string text, int x, int y, Color color, float scale)
@@ -1685,7 +1865,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
     )
     {
         int leftX = x;
-        int rightX = x + 360;
+        int rightX = x + GetTwoColumnOffset();
 
         this.DrawLine(b, itemTitle, leftX, y);
         this.DrawLine(b, expenseTitle, rightX, y);
@@ -1747,7 +1927,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
     )
     {
         int leftX = x;
-        int rightX = x + 360;
+        int rightX = x + GetTwoColumnOffset();
 
         this.DrawLine(b, I18n.Get("finance.daily_income_details"), leftX, y);
         this.DrawLine(b, I18n.Get("finance.daily_expense_details"), rightX, y);
@@ -1802,7 +1982,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawSeasonTrendChart(SpriteBatch b, List<int> values, int x, int y)
     {
-        int chartWidth = 620;
+        int chartWidth = GetChartWidth();
         int chartHeight = 260;
 
         int left = x;
@@ -1903,7 +2083,7 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private void DrawAnnualTrendChart(SpriteBatch b, List<int> values, int x, int y)
     {
-        int chartWidth = 620;
+        int chartWidth = GetChartWidth();
         int chartHeight = 260;
 
         int left = x;
@@ -2191,23 +2371,6 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private float GetBodyTextScale()
     {
-        string languageCode = LocalizedContentManager.CurrentLanguageCode.ToString();
-
-        return languageCode switch
-        {
-            "zh" => 1.00f,
-            "en" => 0.75f,
-            "ja" => 0.80f,
-            "ko" => 0.65f,
-            "pt" => 0.82f,
-            "es" => 0.85f,
-            "fr" => 0.60f,
-            "de" => 0.60f,
-            "it" => 0.85f,
-            "ru" => 0.85f,
-            "tr" => 0.85f,
-            "hu" => 0.85f,
-            _ => 0.85f
-        };
+        return 1.00f;
     }
 }

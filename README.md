@@ -1,79 +1,34 @@
 # Reality Check
 
-Reality Check is a local Stardew Valley SMAPI mod by Stan. It adds financial pressure and feedback systems so farm money is tracked, taxed, explained, and affected by a changing market. [F]
+Reality Check 是 Stan 的 Stardew Valley 本地 SMAPI Mod。
 
-Current manifest version: `1.4.1`. [F]
+当前源码版本是 `1.4.1`。项目包含财务报表、税务、医保、市场价格、Financial Manual 和 Pelican Town Commodity Exchange。
 
-## Requirements
+## 阅读入口
 
-- Stardew Valley 1.6+ [P: README history]
-- SMAPI 4.0+ [F: `manifest.json` has `MinimumApiVersion` `4.0.0`]
-- .NET 6 target framework [F: `RealityCheck.csproj`]
+请优先阅读：
 
-## Current Feature Areas
+1. `PROJECT_DOCUMENTATION.md`：唯一项目总文档，包含当前状态、公式、源码结构、测试方式、历史资料索引和以后给 Codex/AI 的规则。
+2. `CHANGELOG.md`：轻量变更记录。
 
-- Financial ledger and Financial Manual reports. [F]
-- Weekly tax system with income tax, property tax, business property tax, tax history, and custom tax notice UI. [F]
-- Harvey health insurance expense/reimbursement tracking. [F]
-- Dynamic market prices with market trend history, shop sale and shipping settlement integration, tooltip price patching, and Market Price UI. [F]
-- Pelican Town Commodity Exchange with account transfers, contract catalog, positions, margin calls, close position flow, delivery/default handling, debt, and Exchange UI. [F]
-- Localization files for default, German, French, Japanese, and Chinese. [F]
+过去拆散的工作流文档已经合并进 `PROJECT_DOCUMENTATION.md`。不要再从旧的 `AGENTS.md`、`CURRENT_STATUS.md`、`ROADMAP.md`、`TESTING.md` 或 `docs/` 分散文档找项目事实。
 
-## How To Open The UI
+## 快速运行
 
-Load a save and press the configured Financial Manual hotkey. The default is:
-
-```text
-O
-```
-
-The key is controlled by `OpenReportKey` in `config.json` after first launch. [F]
-
-## Build
-
-From the repository root:
+构建：
 
 ```bash
 dotnet build
 ```
 
-The project uses `Pathoschild.Stardew.ModBuildConfig`, so a normal build also tries to deploy the mod to the local Stardew Valley Mods folder and generate a release zip. [F]
+启动游戏后通过 SMAPI 进入存档，默认按 `O` 打开 Financial Manual。
 
-In Codex sandboxed runs, deployment may require permission because the Mods folder is outside the repository. [F]
+`dotnet build` 通过不等于游戏内验收通过。UI、税务、市场价格和 Exchange 相关改动都需要进游戏确认。
 
-## Installation
+## 开发规则摘要
 
-1. Install SMAPI.
-2. Build or download Reality Check.
-3. Put the `RealityCheck` mod folder in your Stardew Valley `Mods` folder.
-4. Launch Stardew Valley through SMAPI.
-
-## Permissions
-
-Please do not reupload Reality Check or modified versions without permission.
-
-You may inspect the source code for learning purposes. Translation patches, compatibility patches, or modified releases should request permission first.
-
-## Credits
-
-Created by Stan.
-
-## Documentation
-
-Start here:
-
-- `AGENTS.md`: Codex workflow rules.
-- `CURRENT_STATUS.md`: current source-verified state.
-- `TESTING.md`: short testing guide.
-- `ROADMAP.md`: future direction, not an implementation queue.
-- `CHANGELOG.md`: project change record.
-- `docs/PROJECT_OVERVIEW.md`: full project overview.
-- `docs/ARCHITECTURE.md`: source architecture map.
-- `docs/RECOVERED_REFERENCES.md`: recovered source index.
-
-## Development Boundaries
-
-- Do not change save-data structures without migration planning and Stan's confirmation. [F]
-- Do not change market price, tax, exchange, or report accounting logic casually. [F]
-- Do not treat old email/Nexus/planning docs as current truth without source verification. [F]
-- Do not accept `dotnet build` alone as final validation for UI-facing work; verify in game through SMAPI when possible. [F]
+- 默认在 `main` 单线工作。
+- 可以 commit 到 `main`，但不要自动 push；Stan 手动执行 `git push`。
+- 不要擅自新增文档文件，优先更新 `PROJECT_DOCUMENTATION.md`、`README.md` 和 `CHANGELOG.md`。
+- 不要擅自修改税务、市场价格、账本、Exchange 或存档结构。
+- 不要发布 Nexus，不要创建 release。

@@ -1,3 +1,35 @@
 bin/
 obj/
 .DS_Store
+
+# Build and release outputs
+*.zip
+RealityCheck*.zip
+*.nupkg
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.cache
+*.bak
+*.orig
+
+# IDE/editor local state
+.vs/
+.vscode/*
+!.vscode/settings.example.json
+!.vscode/extensions.json
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Local game/SMAPI artifacts copied near the repo during manual testing
+SMAPI-latest.txt
+SMAPI-crash.txt
+ErrorLogs/
+Logs/
+local-deploy/
+deploy/

@@ -1,49 +1,51 @@
-# Architecture
+# 架构说明
 
-## Entry Point
+这个文档说明 Reality Check 当前源码的大致结构。类名、文件名和 SMAPI 术语保持英文。
 
-- [F] `ModEntry.cs` is the SMAPI entry point.
-- [F] It initializes config, ledger, analytics, market, tax, exchange, and notice services.
-- [F] It applies Harmony patches for shop sales, shop market prices, tooltip prices, and shipping settlement tracing.
-- [F] It registers exchange debug console commands.
-- [F] It opens `FinanceMenu` when `OpenReportKey` is pressed and no other clickable menu is active.
+## 入口
 
-## Service Layer
+- [F] `ModEntry.cs` 是 SMAPI 入口。
+- [F] 它初始化 config、ledger、analytics、market、tax、exchange 和 notice 相关服务。
+- [F] 它安装 Harmony patch，包括商店销售、商店市场价、tooltip 市场价和出货箱结算追踪。
+- [F] 它注册 Exchange 调试用 console commands。
+- [F] 当玩家按下 `OpenReportKey` 且当前没有其他菜单时，它打开 `FinanceMenu`。
 
-- [F] `LedgerService` owns persisted financial save data under the key `save-data`.
-- [F] `AnalyticsService` builds report summaries from ledger data.
-- [F] `TaxService` calculates income tax, property tax, and business property tax.
-- [F] `MarketPriceService` is the current market price source.
-- [F] `MarketTrendService` persists market trends and price history under `market-trend-state`.
-- [F] `ExchangeService` persists exchange account data under `exchange-data`.
-- [F] `ExchangeContractCatalogService` builds tradable exchange contract candidates from market data.
+## 服务层
 
-## UI Layer
+- [F] `LedgerService` 管理财务账本，并用 save data key `save-data` 持久化。
+- [F] `AnalyticsService` 根据 ledger 数据生成报表汇总。
+- [F] `TaxService` 计算 Income Tax、Property Tax 和 Business Property Tax。
+- [F] `MarketPriceService` 是当前市场价格来源。
+- [F] `MarketTrendService` 用 `market-trend-state` 保存市场趋势和历史价格。
+- [F] `ExchangeService` 用 `exchange-data` 保存 Exchange 账户和持仓状态。
+- [F] `ExchangeContractCatalogService` 根据市场数据生成可交易合约候选。
 
-- [F] `UI/FinanceMenu.cs` implements the Financial Manual reports and Market Price page.
-- [F] `UI/ExchangeMenu.cs` implements the Commodity Exchange UI.
-- [F] `UI/TaxNoticeMenu.cs` implements custom tax notice display/signature behavior.
+## UI 层
 
-## Data Flow
+- [F] `UI/FinanceMenu.cs` 实现 Financial Manual、报表和 Market Price 页面。
+- [F] `UI/ExchangeMenu.cs` 实现 Commodity Exchange UI。
+- [F] `UI/TaxNoticeMenu.cs` 实现自定义 Tax Notice 和签名显示。
 
-1. [F] Game events and Harmony patches detect income, expenses, market-price sale effects, and daily lifecycle events.
-2. [F] `LedgerService` records financial facts and persists them per save.
-3. [F] `MarketTrendService` keeps market trend state and history per save.
-4. [F] `MarketPriceService` calculates current market prices from config, categories, weather/festival/off-season factors, trends, and item identity.
-5. [F] `AnalyticsService` reads ledger entries to build UI summaries.
-6. [F] `TaxService` reads ledger and game state to calculate taxes.
-7. [F] `FinanceMenu`, `TaxNoticeMenu`, and `ExchangeMenu` display the results.
+## 数据流
 
-## Configuration
+1. [F] 游戏事件和 Harmony patch 检测收入、支出、市场价销售效果和每日生命周期。
+2. [F] `LedgerService` 记录财务事实，并按存档保存。
+3. [F] `MarketTrendService` 保存每个存档的市场趋势和历史价格。
+4. [F] `MarketPriceService` 根据配置、分类、天气/节日/反季因子、趋势和物品身份计算当前市场价。
+5. [F] `AnalyticsService` 从 ledger entries 生成 UI 报表汇总。
+6. [F] `TaxService` 从 ledger 和游戏状态计算税务。
+7. [F] `FinanceMenu`、`TaxNoticeMenu`、`ExchangeMenu` 负责展示结果。
 
-- [F] `Data/ModConfig.cs` defines `Tax`, `Market`, and `OpenReportKey`.
-- [F] Default `OpenReportKey` is `O`.
-- [F] Market config includes shipping-bin shadow/trace toggles and market settlement enablement.
-- [F] Tax config includes notice mail/signature toggles, business property tax threshold, income tax brackets, and property tax settings.
+## 配置
 
-## Build And Deploy
+- [F] `Data/ModConfig.cs` 定义 `Tax`、`Market` 和 `OpenReportKey`。
+- [F] 默认 `OpenReportKey` 是 `O`。
+- [F] Market config 包括出货箱 shadow/trace 开关和市场结算开关。
+- [F] Tax config 包括税单邮件、签名要求、经营资产税阈值、所得税档位和房产税设置。
 
-- [F] `RealityCheck.csproj` targets `net6.0`.
-- [F] It references `Pathoschild.Stardew.ModBuildConfig` and `Lib.Harmony`.
-- [F] `dotnet build` compiles, deploys to the configured Stardew Valley Mods directory, and generates a release zip.
+## 构建和部署
+
+- [F] `RealityCheck.csproj` 目标框架是 `net6.0`。
+- [F] 项目引用 `Pathoschild.Stardew.ModBuildConfig` 和 `Lib.Harmony`。
+- [F] `dotnet build` 会编译、部署到配置的 Stardew Valley Mods 目录，并生成 zip。
 

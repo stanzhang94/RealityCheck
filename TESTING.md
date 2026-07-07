@@ -1,103 +1,107 @@
-# Reality Check Testing Guide
+# Reality Check 测试指南
 
-Reality Check testing must include both technical checks and in-game checks. `dotnet build` alone is not final acceptance for UI or gameplay behavior.
+Reality Check 的测试分两层：技术检查和游戏内检查。
 
-For the expanded guide, see `docs/TESTING_GUIDE.md`.
+`dotnet build` 通过不等于游戏内验收通过。特别是 Financial Manual、Tax Notice、Market Price、Exchange 等 UI 功能，必须进游戏看实际效果。
 
-## Build check
+详细流程见 `docs/TESTING_GUIDE.md`。
 
-From the repository root:
+## 1. 构建检查
+
+在项目根目录运行：
 
 ```bash
 dotnet build
 ```
 
-Current observed behavior:
+当前已知行为：
 
-- The project uses `Pathoschild.Stardew.ModBuildConfig`.
-- A normal build compiles the DLL and then tries to deploy the mod to the local Stardew Valley Mods folder.
-- In a restricted Codex sandbox, deployment may fail because the target folder is outside the workspace.
-- With permission to write to the local Stardew Valley Mods folder, `dotnet build` succeeded on 2026-07-07 with 0 warnings and 0 errors.
+- 项目使用 `Pathoschild.Stardew.ModBuildConfig`。
+- build 会先编译 `RealityCheck.dll`。
+- 随后会尝试把 Mod 文件复制到本地 Stardew Valley `Mods/RealityCheck` 目录。
+- 还会在 `bin/Debug/net6.0/` 下生成 release zip。
+- 在 Codex 受限沙盒里，部署到游戏 Mods 目录可能失败，因为该目录在仓库外。
+- 2026-07-07 授权后 build 成功，0 warnings，0 errors。
 
-## Local deployment
+## 2. 本地部署检查
 
-The build package is configured to deploy to:
+默认部署位置：
 
 ```text
 ~/Library/Application Support/Steam/steamapps/common/Stardew Valley/Contents/MacOS/Mods/RealityCheck
 ```
 
-After a successful build, confirm that the deployed mod folder contains at least:
+成功 build 后，检查部署目录至少包含：
 
 - `manifest.json`
 - `RealityCheck.dll`
 - `i18n/`
 
-## SMAPI launch verification
+## 3. SMAPI 启动检查
 
-Launch Stardew Valley through SMAPI and check:
+通过 SMAPI 启动 Stardew Valley，检查：
 
-- SMAPI loads `Reality Check` without red errors.
-- The loaded version matches `manifest.json`.
-- No startup errors appear from Harmony patches, content assets, config loading, or save-data loading.
-- A save can be loaded without save-data migration errors.
+- SMAPI 能加载 `Reality Check`。
+- 加载版本与 `manifest.json` 一致。
+- 启动时没有红色错误。
+- Harmony patch 没有异常失败。
+- 能正常载入一个存档。
 
-## In-game UI verification
+## 4. Financial Manual 游戏内检查
 
-Load a save, then press the configured report hotkey. Default:
+进入存档后按默认快捷键：
 
 ```text
 O
 ```
 
-Verify the Financial Manual / finance UI:
+检查：
 
-- Daily report opens.
-- Seasonal report opens.
-- Annual report opens.
-- Tax report opens.
-- Tax history is readable.
-- Income details are readable.
-- Expense details are readable.
-- Outstanding balance display is correct.
-- Market price table opens and is readable.
-- Market price sorting/search/favorites still behave as expected.
-- Exchange button opens the Commodity Exchange UI when available.
+- Daily report 能打开。
+- Seasonal report 能打开。
+- Annual report 能打开。
+- Tax report 能打开。
+- Tax history 可读。
+- Income details 可读。
+- Expense details 可读。
+- Outstanding balance 显示合理。
+- Market Price 表能打开并可读。
+- Market Price 排序、搜索、收藏、历史图不异常。
+- Exchange 按钮能打开 Commodity Exchange UI。
 
-## Tax verification
+## 5. 税务检查
 
-For tax-related changes, verify in game:
+涉及税务时，进游戏确认：
 
-- Weekly tax assessment occurs at the expected time.
-- Income tax, property tax, and business property tax values are plausible.
-- Tax notice mail appears if enabled.
-- Tax notice text layout is readable.
-- Signature requirement works if enabled.
-- Closing behavior works, including the safety exit.
-- Tax records remain visible through reports.
+- 每周税务结算时机正确。
+- Income Tax、Property Tax、Business Property Tax 数值合理。
+- 开启税单邮件时，Tax Notice 能正常出现。
+- 税单文字和公式布局可读。
+- 签名要求能正常工作。
+- Tax History 和报表中的记录一致。
 
-## Market price verification
+## 6. Market Price 检查
 
-For market price changes, verify in game:
+涉及市场价格时，进游戏确认：
 
-- Daily market prices update on a new day.
-- Market price table displays item, base price, daily multiplier, total multiplier, and market price.
-- Shipping-bin settlement behavior matches config.
-- Shop sale prices and tooltip prices are affected only as intended.
-- Existing market trend history is not unexpectedly reset.
+- 新一天后市场价格会更新。
+- Market Price 页面显示 item、base price、daily multiplier、total multiplier、market price。
+- tooltip 显示的售价与 Reality Check 市场价一致。
+- 商店直售和出货箱结算只受到预期影响。
+- 旧的市场趋势历史没有被意外清空。
 
-## Exchange verification
+## 7. Exchange 检查
 
-For exchange-related changes, verify in game:
+涉及 Exchange 时，进游戏确认：
 
-- Exchange account view displays total, locked, available cash, debt, positions, and history.
-- Deposit and withdraw flows update both farm money and exchange account state.
-- Contract catalog lists tradable items.
-- Long and short positions can be created only when valid.
-- Margin calls, top-ups, close position, delivery, default, and debt collection behavior match the intended scenario.
-- Exchange history text is readable in the current locale.
+- 账户页显示总额、锁定保证金、可用现金、债务、持仓和历史。
+- Deposit / Withdraw 会同时影响农场钱包和 Exchange 账户。
+- 合约目录能列出可交易商品。
+- Long / Short 持仓创建条件正确。
+- Margin call、Top Up、Forced Liquidation、Close、Delivery、Default、Debt Collection 行为符合预期。
+- Exchange 历史文字在当前语言下可读。
 
-Optional SMAPI console checks:
+可选 SMAPI console 命令：
 
 ```text
 rc_exchange_status
@@ -106,20 +110,22 @@ rc_exchange_withdraw <amount>
 rc_exchange_catalog
 ```
 
-## Log review
+## 8. 日志检查
 
-After in-game testing, check the SMAPI log for:
+测试后查看 SMAPI log，重点看：
 
-- Red errors.
-- Repeated warning spam.
-- Harmony patch failures.
-- Save/load failures.
-- Market trend migration messages.
-- Unexpected ledger or exchange persistence issues.
+- 红色错误。
+- 重复 warning。
+- Harmony patch 失败。
+- Save/load 失败。
+- Market trend migration 信息。
+- Exchange 持久化异常。
 
-## Acceptance rule
+## 验收规则
 
-For gameplay or UI changes, final validation should say both:
+最终报告至少说明：
 
-- whether `dotnet build` passed; and
-- what was verified in Stardew Valley/SMAPI, or why in-game verification was not performed.
+- 是否运行 `dotnet build`，结果如何。
+- 是否进入 Stardew Valley / SMAPI 验证。
+- 如果没有游戏内验证，明确说明原因。
+

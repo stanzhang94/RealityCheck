@@ -1,26 +1,26 @@
-# Release Checklist
+# 发布前检查清单
 
-Do not publish GitHub releases or Nexus files automatically.
+不要自动发布 GitHub release。不要自动发布 Nexus。
 
-## Before Release
+## 发布前
 
-- [ ] [F] Confirm `manifest.json` version.
-- [ ] [F] Confirm `RealityCheck.csproj` builds.
-- [ ] [F] Run `dotnet build`.
-- [ ] [F] Confirm generated zip name/version.
-- [ ] [F] Confirm deployed mod folder contains current files.
-- [ ] [F] Launch through SMAPI.
-- [ ] [F] Load a save.
-- [ ] [F] Open Financial Manual with `O` or configured key.
-- [ ] [F] Check Daily, Seasonal, Annual, Tax, Market Price, and Exchange UI.
-- [ ] [F] Review SMAPI log.
-- [ ] [P] Prepare GitHub/Nexus changelog from `CHANGELOG.md` and `docs/VERSION_HISTORY.md`.
-- [ ] [U] Confirm Nexus page/file/version history manually if publishing there.
+- [ ] [F] 确认 `manifest.json` 版本。
+- [ ] [F] 确认 `RealityCheck.csproj` 能 build。
+- [ ] [F] 运行 `dotnet build`。
+- [ ] [F] 确认生成的 zip 名称和版本。
+- [ ] [F] 确认部署后的 Mod 目录包含当前文件。
+- [ ] [F] 通过 SMAPI 启动游戏。
+- [ ] [F] 载入一个存档。
+- [ ] [F] 用 `O` 或配置后的快捷键打开 Financial Manual。
+- [ ] [F] 检查 Daily、Seasonal、Annual、Tax、Market Price 和 Exchange UI。
+- [ ] [F] 检查 SMAPI log。
+- [ ] [P] 根据 `CHANGELOG.md` 和 `docs/VERSION_HISTORY.md` 准备 GitHub/Nexus changelog。
+- [ ] [U] 如果要发布 Nexus，手动确认 Nexus 页面、文件和版本历史。
 
-## Release Safety
+## 发布安全规则
 
-- Do not change save-data schema in a release without migration notes.
-- Do not change tax/market/report formulas without explicit release notes.
-- Do not publish from a dirty working tree.
-- Do not force-push release branches.
+- 没有迁移说明时，不要改变存档数据结构。
+- 改税务、Market Price 或报表公式时，必须写清 release note。
+- 不要从脏工作区发布。
+- 不要 force push 发布分支。
 

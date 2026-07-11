@@ -2,7 +2,7 @@
 
 Reality Check 是 Stan 的 Stardew Valley 本地 SMAPI Mod。
 
-当前源码版本是 `1.4.1`。项目包含财务报表、税务、医保、市场价格、Financial Manual 和 Pelican Town Commodity Exchange。
+当前源码版本是 `1.4.2`。项目包含财务报表、税务、医保、市场价格、Financial Manual 和 Pelican Town Commodity Exchange。
 
 ## 阅读入口
 

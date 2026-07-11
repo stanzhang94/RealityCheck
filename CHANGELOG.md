@@ -4,6 +4,7 @@
 
 - 修复带品质物品的商店售价、出货箱结算和 Tooltip，使其在普通品质标准 Market Price 上只应用一次品质系数。
 - 修复 Exchange 多头实物交割超过单堆上限时的物品丢失；交割现在会按实际堆叠上限拆分并在背包容量不足时完整失败。
+- Restored 7-day contract eligibility for fast-growing crops and fruit-tree produce.
 - 将 Mod 版本更新为 `1.4.2`。
 - 删除复杂的分散工作流文档，改为一个中文优先的 `PROJECT_DOCUMENTATION.md` 项目总文档。
 - 简化 `README.md`，让它只作为项目入口和阅读指引。

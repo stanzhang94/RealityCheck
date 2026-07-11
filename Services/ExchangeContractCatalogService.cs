@@ -5,6 +5,8 @@ using System.Reflection;
 using RealityCheck.Models;
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.GameData.Crops;
+using StardewValley.GameData.FruitTrees;
 
 namespace RealityCheck.Services;
 
@@ -183,10 +185,123 @@ public class ExchangeContractCatalogService
             ContractValuePerLot = contractValue,
             InitialMarginRequiredPerLot = (int)Math.Ceiling(contractValue * ExchangeService.InitialMarginRate),
             MaintenanceMarginRequiredPerLot = (int)Math.Ceiling(contractValue * ExchangeService.MaintenanceMarginRate),
-            SupportsSevenDayContract = !isRawCrop,
+            SupportsSevenDayContract = !isRawCrop || this.SupportsSevenDayRawCrop(entry.ItemId),
             SupportsFourteenDayContract = true,
             SupportsTwentyEightDayContract = true
         };
+    }
+
+    private bool SupportsSevenDayRawCrop(string itemId)
+    {
+        string normalizedItemId = NormalizeObjectId(itemId);
+        if (string.IsNullOrWhiteSpace(normalizedItemId))
+            return false;
+
+        try
+        {
+            if (IsFruitTreeProduct(normalizedItemId))
+                return true;
+
+            int? growthDays = TryGetCropGrowthDaysForHarvestItem(normalizedItemId);
+            if (growthDays.HasValue)
+                return growthDays.Value <= 7;
+
+            this.monitor.Log(
+                $"No crop or fruit-tree production data found for 7-day exchange eligibility: {normalizedItemId}.",
+                LogLevel.Trace
+            );
+        }
+        catch (Exception ex)
+        {
+            this.monitor.Log(
+                $"Failed to read production data for 7-day exchange eligibility: {normalizedItemId}. {ex.GetType().Name}: {ex.Message}",
+                LogLevel.Trace
+            );
+        }
+
+        return false;
+    }
+
+    private static bool IsFruitTreeProduct(string normalizedItemId)
+    {
+        if (Game1.fruitTreeData is null)
+            return false;
+
+        foreach (FruitTreeData tree in Game1.fruitTreeData.Values)
+        {
+            if (tree?.Fruit is null)
+                continue;
+
+            foreach (FruitTreeFruitData fruit in tree.Fruit)
+            {
+                if (fruit is null)
+                    continue;
+
+                if (string.Equals(
+                    NormalizeObjectId(fruit.ItemId),
+                    normalizedItemId,
+                    StringComparison.OrdinalIgnoreCase
+                ))
+                {
+                    return true;
+                }
+
+                if (fruit.RandomItemId?.Any(candidate => string.Equals(
+                    NormalizeObjectId(candidate),
+                    normalizedItemId,
+                    StringComparison.OrdinalIgnoreCase
+                )) == true)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static int? TryGetCropGrowthDaysForHarvestItem(string normalizedItemId)
+    {
+        if (Game1.cropData is null)
+            return null;
+
+        int? shortestGrowthDays = null;
+
+        foreach (CropData crop in Game1.cropData.Values)
+        {
+            if (crop is null
+                || !string.Equals(
+                    NormalizeObjectId(crop.HarvestItemId),
+                    normalizedItemId,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                || crop.DaysInPhase is null
+                || crop.DaysInPhase.Count == 0)
+            {
+                continue;
+            }
+
+            int growthDays = crop.DaysInPhase.Sum(days => Math.Max(0, days));
+            if (growthDays <= 0)
+                continue;
+
+            shortestGrowthDays = !shortestGrowthDays.HasValue
+                ? growthDays
+                : Math.Min(shortestGrowthDays.Value, growthDays);
+        }
+
+        return shortestGrowthDays;
+    }
+
+    private static string NormalizeObjectId(string? itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return string.Empty;
+
+        string trimmed = itemId.Trim();
+        return trimmed.StartsWith("(O)", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : "(O)" + trimmed;
     }
 
     private bool HasUsablePriceHistory(MarketPriceTableEntry entry)

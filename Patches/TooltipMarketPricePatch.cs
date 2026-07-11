@@ -86,20 +86,23 @@ public static class TooltipMarketPricePatch
 
     public static void ObjectSellToStorePricePostfix(
         StardewValley.Object __instance,
+        long specificPlayerID,
         ref int __result
     )
     {
         ReplaceTooltipPriceIfNeeded(
             __instance,
             ref __result,
-            "sellToStorePrice"
+            "sellToStorePrice",
+            specificPlayerID
         );
     }
 
     private static void ReplaceTooltipPriceIfNeeded(
         StardewValley.Object item,
         ref int result,
-        string source
+        string source,
+        long specificPlayerId
     )
     {
         if (!IsCurrentTooltipObject(item))
@@ -108,11 +111,15 @@ public static class TooltipMarketPricePatch
         if (marketPriceService is null)
             return;
 
+        if (marketPriceService.IsVanillaPriceProbeActive())
+            return;
+
         int vanillaUnitPrice = Math.Max(0, result);
         int marketUnitPrice = GetMarketUnitPriceSafely(
             item,
             vanillaUnitPrice,
-            source
+            source,
+            specificPlayerId
         );
 
         if (marketUnitPrice == vanillaUnitPrice)
@@ -144,7 +151,8 @@ public static class TooltipMarketPricePatch
     private static int GetMarketUnitPriceSafely(
         StardewValley.Object item,
         int vanillaUnitPrice,
-        string source
+        string source,
+        long specificPlayerId
     )
     {
         if (marketPriceService is null)
@@ -158,7 +166,8 @@ public static class TooltipMarketPricePatch
             marketPriceLookupDepth++;
             return marketPriceService.GetShopSaleMarketUnitPrice(
                 item,
-                Math.Max(0, vanillaUnitPrice)
+                Math.Max(0, vanillaUnitPrice),
+                specificPlayerId
             );
         }
         catch (Exception ex)

@@ -14,6 +14,9 @@ public class MarketPriceService
     public const double MinimumItemDailyFactor = 0.95;
     public const double MaximumItemDailyFactor = 1.05;
 
+    [ThreadStatic]
+    private static int vanillaPriceProbeDepth;
+
     private readonly ConfigService configService;
     private readonly MarketCategoryResolver marketCategoryResolver;
     private readonly WeatherFactorService weatherFactorService;
@@ -54,6 +57,11 @@ public class MarketPriceService
     public bool IsShippingBinMarketSettlementEnabled()
     {
         return this.configService.Config.Market.EnableShippingBinMarketSettlement;
+    }
+
+    public bool IsVanillaPriceProbeActive()
+    {
+        return vanillaPriceProbeDepth > 0;
     }
 
     public string GetItemDailyFactorMinimumLabel()
@@ -343,10 +351,15 @@ public class MarketPriceService
         int safeQuantity = Math.Max(0, quantity);
         int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
         int baseTotal = safeBaseUnitPrice * safeQuantity;
+        int normalQualityBaseUnitPrice = this.GetNormalQualityVanillaUnitPrice(
+            item,
+            safeBaseUnitPrice,
+            -1L
+        );
 
         MarketCategoryResult category = this.marketCategoryResolver.Resolve(
             item,
-            safeBaseUnitPrice
+            normalQualityBaseUnitPrice
         );
 
         if (!category.IsMarketManaged)
@@ -376,30 +389,39 @@ public class MarketPriceService
             item
         );
 
-        int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+        int standardMarketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
             marketCommodityKey,
-            safeBaseUnitPrice,
+            normalQualityBaseUnitPrice,
             factors.DailyMultiplier
+        );
+        int marketUnitPrice = ApplyItemQualityToStandardMarketPrice(
+            item,
+            standardMarketUnitPrice
         );
         int marketTotal = marketUnitPrice * safeQuantity;
 
         double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
             marketCommodityKey,
-            marketUnitPrice
+            standardMarketUnitPrice
         );
         double displayTotalMultiplier = GetDisplayTotalMultiplier(
-            safeBaseUnitPrice,
-            marketUnitPrice
+            normalQualityBaseUnitPrice,
+            standardMarketUnitPrice
         );
 
         this.RecordMarketPriceHistory(
             marketCommodityKey,
             item.QualifiedItemId,
             item.DisplayName,
-            safeBaseUnitPrice,
-            marketUnitPrice,
+            normalQualityBaseUnitPrice,
+            standardMarketUnitPrice,
             displayDailyMultiplier,
             displayTotalMultiplier
+        );
+
+        double saleTotalMultiplier = GetDisplayTotalMultiplier(
+            safeBaseUnitPrice,
+            marketUnitPrice
         );
 
         return new MarketPriceResult
@@ -409,9 +431,9 @@ public class MarketPriceService
             Quantity = safeQuantity,
             BaseUnitPrice = safeBaseUnitPrice,
             BaseTotal = baseTotal,
-            MarketMultiplier = displayTotalMultiplier,
+            MarketMultiplier = saleTotalMultiplier,
             DailyMultiplier = displayDailyMultiplier,
-            TotalMultiplier = displayTotalMultiplier,
+            TotalMultiplier = saleTotalMultiplier,
             MarketTotal = marketTotal,
             MarketUnitPrice = safeQuantity > 0
                 ? (double)marketTotal / safeQuantity
@@ -434,14 +456,20 @@ public class MarketPriceService
 
     public int GetShopSaleMarketUnitPrice(
         Item item,
-        int baseUnitPrice
+        int baseUnitPrice,
+        long specificPlayerId = -1L
     )
     {
         int safeBaseUnitPrice = Math.Max(0, baseUnitPrice);
+        int normalQualityBaseUnitPrice = this.GetNormalQualityVanillaUnitPrice(
+            item,
+            safeBaseUnitPrice,
+            specificPlayerId
+        );
 
         MarketCategoryResult category = this.marketCategoryResolver.Resolve(
             item,
-            safeBaseUnitPrice
+            normalQualityBaseUnitPrice
         );
 
         if (!category.IsMarketManaged)
@@ -457,32 +485,109 @@ public class MarketPriceService
             item
         );
 
-        int marketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
+        int standardMarketUnitPrice = this.CalculateRecursiveMarketUnitPrice(
             marketCommodityKey,
-            safeBaseUnitPrice,
+            normalQualityBaseUnitPrice,
             factors.DailyMultiplier
         );
 
         double displayDailyMultiplier = this.GetDisplayDailyMultiplier(
             marketCommodityKey,
-            marketUnitPrice
+            standardMarketUnitPrice
         );
         double displayTotalMultiplier = GetDisplayTotalMultiplier(
-            safeBaseUnitPrice,
-            marketUnitPrice
+            normalQualityBaseUnitPrice,
+            standardMarketUnitPrice
         );
 
         this.RecordMarketPriceHistory(
             marketCommodityKey,
             item.QualifiedItemId,
             item.DisplayName,
-            safeBaseUnitPrice,
-            marketUnitPrice,
+            normalQualityBaseUnitPrice,
+            standardMarketUnitPrice,
             displayDailyMultiplier,
             displayTotalMultiplier
         );
 
-        return marketUnitPrice;
+        return ApplyItemQualityToStandardMarketPrice(
+            item,
+            standardMarketUnitPrice
+        );
+    }
+
+    private int GetNormalQualityVanillaUnitPrice(
+        Item item,
+        int fallbackUnitPrice,
+        long specificPlayerId
+    )
+    {
+        int safeFallbackUnitPrice = Math.Max(0, fallbackUnitPrice);
+
+        if (!UsesStandardQualityMarketPricing(item) || item.Quality == 0)
+            return safeFallbackUnitPrice;
+
+        try
+        {
+            Item normalQualityItem = item.getOne();
+            normalQualityItem.Stack = Math.Max(1, item.Stack);
+            normalQualityItem.Quality = 0;
+
+            vanillaPriceProbeDepth++;
+            return Math.Max(0, normalQualityItem.sellToStorePrice(specificPlayerId));
+        }
+        catch (Exception ex)
+        {
+            this.monitor.Log(
+                $"Failed to probe normal-quality vanilla price for {item.DisplayName}: {ex.GetType().Name}: {ex.Message}",
+                LogLevel.Warn
+            );
+
+            int qualityNumerator = GetQualityPriceNumerator(item.Quality);
+            return qualityNumerator > 4
+                ? Math.Max(0, (int)((long)safeFallbackUnitPrice * 4 / qualityNumerator))
+                : safeFallbackUnitPrice;
+        }
+        finally
+        {
+            if (vanillaPriceProbeDepth > 0)
+                vanillaPriceProbeDepth--;
+        }
+    }
+
+    private static int ApplyItemQualityToStandardMarketPrice(
+        Item item,
+        int standardMarketUnitPrice
+    )
+    {
+        int safeStandardMarketUnitPrice = Math.Max(0, standardMarketUnitPrice);
+
+        if (!UsesStandardQualityMarketPricing(item))
+            return safeStandardMarketUnitPrice;
+
+        int qualityNumerator = GetQualityPriceNumerator(item.Quality);
+        long adjustedPrice = (long)safeStandardMarketUnitPrice * qualityNumerator / 4;
+        return adjustedPrice > int.MaxValue
+            ? int.MaxValue
+            : (int)adjustedPrice;
+    }
+
+    private static bool UsesStandardQualityMarketPricing(Item item)
+    {
+        return item is StardewValley.Object obj
+            && obj is not Fence
+            && obj.Category != StardewValley.Object.tackleCategory;
+    }
+
+    private static int GetQualityPriceNumerator(int quality)
+    {
+        return quality switch
+        {
+            StardewValley.Object.medQuality => 5,
+            StardewValley.Object.highQuality => 6,
+            StardewValley.Object.bestQuality => 8,
+            _ => 4
+        };
     }
 
     public MarketPriceFactorBreakdown GetCurrentMarketFactorBreakdown(

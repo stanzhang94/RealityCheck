@@ -1,7 +1,7 @@
 {
   "Name": "Reality Check",
   "Author": "Stan",
-  "Version": "1.4.1",
+  "Version": "1.4.2",
   "Description": "Adds weekly taxes, health insurance, financial reports, dynamic market prices, and the Pelican Town Commodity Exchange to make farm life a little less consequence-free.",
   "UniqueID": "Stan.RealityCheck",
   "EntryDll": "RealityCheck.dll",

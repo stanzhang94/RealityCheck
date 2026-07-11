@@ -73,6 +73,7 @@ public static class ShopSaleMarketPricePatch
 
     public static void ObjectSellToStorePricePostfix(
         StardewValley.Object __instance,
+        long specificPlayerID,
         ref int __result
     )
     {
@@ -82,10 +83,14 @@ public static class ShopSaleMarketPricePatch
         if (marketPriceService is null)
             return;
 
+        if (marketPriceService.IsVanillaPriceProbeActive())
+            return;
+
         int vanillaUnitPrice = __result;
         int marketUnitPrice = marketPriceService.GetShopSaleMarketUnitPrice(
             __instance,
-            vanillaUnitPrice
+            vanillaUnitPrice,
+            specificPlayerID
         );
 
         pendingPriceContexts ??= new List<ShopSalePriceContext>();

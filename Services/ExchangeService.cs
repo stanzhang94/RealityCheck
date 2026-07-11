@@ -1223,14 +1223,15 @@ public class ExchangeService
         int deliveryValue = deliveryPrice * totalQuantity;
         int releasedMargin = Math.Max(0, position.PositionMargin);
 
-        Item? deliveredItem = this.CreateDeliveryItem(position, totalQuantity);
-        if (deliveredItem is null)
+        List<Item>? deliveryStacks = this.CreateDeliveryItemStacks(position, totalQuantity);
+        if (deliveryStacks is null)
         {
             message = I18n.Get("exchange.delivery_claim_error_create_item");
             return false;
         }
 
-        if (!Game1.player.addItemToInventoryBool(deliveredItem))
+        if (!this.CanInventoryAcceptAllItems(deliveryStacks)
+            || !this.TryAddItemsToInventoryAtomically(deliveryStacks))
         {
             message = I18n.Get("exchange.delivery_claim_error_inventory_full");
             return false;
@@ -1238,7 +1239,6 @@ public class ExchangeService
 
         this.data.Account.CashBalance -= deliveryValue;
 
-        position.Status = ExchangePosition.StatusDelivered;
         position.PositionMargin = 0;
         position.CurrentPrice = deliveryPrice;
         position.LastSettlementPrice = deliveryPrice;
@@ -1262,6 +1262,8 @@ public class ExchangeService
             -deliveryValue,
             position.ContractId
         );
+
+        position.Status = ExchangePosition.StatusDelivered;
 
         this.Save();
 
@@ -1520,6 +1522,122 @@ public class ExchangeService
         }
     }
 
+    private List<Item>? CreateDeliveryItemStacks(
+        ExchangePosition position,
+        int totalQuantity
+    )
+    {
+        Item? template = this.CreateDeliveryItem(position, 1);
+        if (template is null)
+            return null;
+
+        int maximumStackSize = Math.Max(1, template.maximumStackSize());
+        int remaining = Math.Max(0, totalQuantity);
+        List<Item> stacks = new();
+
+        while (remaining > 0)
+        {
+            int stackSize = Math.Min(maximumStackSize, remaining);
+            Item? stack = this.CreateDeliveryItem(position, stackSize);
+            if (stack is null)
+                return null;
+
+            stacks.Add(stack);
+            remaining -= stackSize;
+        }
+
+        return stacks;
+    }
+
+    private bool CanInventoryAcceptAllItems(IReadOnlyList<Item> items)
+    {
+        try
+        {
+            List<Item?> simulatedInventory = Game1.player.Items
+                .Select(CloneItemWithStack)
+                .ToList();
+
+            foreach (Item item in items)
+            {
+                Item remainingItem = CloneItemWithStack(item)!;
+
+                for (int index = 0; index < simulatedInventory.Count && remainingItem.Stack > 0; index++)
+                {
+                    Item? existingItem = simulatedInventory[index];
+                    if (existingItem is null || !existingItem.canStackWith(remainingItem))
+                        continue;
+
+                    remainingItem.Stack = existingItem.addToStack(remainingItem);
+                }
+
+                if (remainingItem.Stack <= 0)
+                    continue;
+
+                int emptySlot = simulatedInventory.FindIndex(existingItem => existingItem is null);
+                if (emptySlot < 0)
+                    return false;
+
+                simulatedInventory[emptySlot] = remainingItem;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            this.monitor.Log($"Failed to simulate inventory capacity for long delivery: {ex}", LogLevel.Warn);
+            return false;
+        }
+    }
+
+    private bool TryAddItemsToInventoryAtomically(IReadOnlyList<Item> items)
+    {
+        List<InventorySlotSnapshot> snapshot = Game1.player.Items
+            .Select(item => new InventorySlotSnapshot(item, item?.Stack ?? 0))
+            .ToList();
+
+        try
+        {
+            foreach (Item item in items)
+            {
+                if (Game1.player.addItemToInventoryBool(item))
+                    continue;
+
+                RestoreInventorySnapshot(snapshot);
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            RestoreInventorySnapshot(snapshot);
+            this.monitor.Log($"Failed to add a complete long delivery to inventory: {ex}", LogLevel.Warn);
+            return false;
+        }
+    }
+
+    private static Item? CloneItemWithStack(Item? item)
+    {
+        if (item is null)
+            return null;
+
+        Item clone = item.getOne();
+        clone.Stack = item.Stack;
+        return clone;
+    }
+
+    private static void RestoreInventorySnapshot(IReadOnlyList<InventorySlotSnapshot> snapshot)
+    {
+        for (int index = 0; index < snapshot.Count && index < Game1.player.Items.Count; index++)
+        {
+            InventorySlotSnapshot slot = snapshot[index];
+            Game1.player.Items[index] = slot.Item;
+
+            if (slot.Item is not null)
+                slot.Item.Stack = slot.Stack;
+        }
+    }
+
     private bool IsMatchingDeliveryInventoryItem(StardewValley.Object obj, ExchangePosition position)
     {
         if (obj is null || position is null)
@@ -1691,6 +1809,11 @@ public class ExchangeService
         int AutoTopUps,
         int MarginCalls,
         int ForcedLiquidations
+    );
+
+    private readonly record struct InventorySlotSnapshot(
+        Item? Item,
+        int Stack
     );
 
 

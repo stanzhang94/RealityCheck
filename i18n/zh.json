@@ -165,6 +165,7 @@
   "exchange.transfer_title": "资金操作",
   "exchange.transfer_amount": "金额",
   "exchange.amount_placeholder": "输入金额",
+  "exchange.transfer_clear": "清零",
   "exchange.deposit": "存入",
   "exchange.withdraw": "提取",
   "exchange.error_enter_amount": "请先输入金额。",

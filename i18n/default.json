@@ -165,6 +165,7 @@
   "exchange.transfer_title": "Funds",
   "exchange.transfer_amount": "Amount",
   "exchange.amount_placeholder": "Amount",
+  "exchange.transfer_clear": "Clear",
   "exchange.deposit": "Deposit",
   "exchange.withdraw": "Withdraw",
   "exchange.error_enter_amount": "Enter amount.",

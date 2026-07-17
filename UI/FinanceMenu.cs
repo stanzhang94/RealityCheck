@@ -26,6 +26,18 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 
     private int scrollOffset = 0;
 
+    private bool isScrollDragCandidate;
+
+    private bool isScrollDragging;
+
+    private int scrollDragStartX;
+
+    private int scrollDragStartY;
+
+    private int scrollDragLastY;
+
+    private bool scrollDragPlaySound;
+
     private int contentTop;
     private int contentBottom;
     private int contentStartY;
@@ -73,6 +85,8 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     private const int MarketPriceRowHeight = 42;
 
     private const int MarketPriceRowsStartOffset = 134;
+
+    private const int ScrollDragThreshold = 8;
 
     private static int GetPreferredMenuWidth()
     {
@@ -161,7 +175,14 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 
     public override void receiveLeftClick(int x, int y, bool playSound = true)
     {
+        bool clickedCloseButton = this.upperRightCloseButton?.containsPoint(x, y) == true;
+
         base.receiveLeftClick(x, y, playSound);
+
+        this.ResetScrollDrag();
+
+        if (clickedCloseButton)
+            return;
 
         if (this.TryHandleReportTabClick(x, y, playSound))
             return;
@@ -180,34 +201,93 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
 
                     if (playSound)
                         Game1.playSound("smallSelect");
+
+                    return;
                 }
-
-                return;
             }
-
-            if (this.TryHandleMarketPriceSearchClick(x, y))
+            else if (this.TryHandleMarketPriceSearchClick(x, y))
             {
                 if (playSound)
                     Game1.playSound("smallSelect");
 
                 return;
             }
-
-            if (this.TryHandleMarketPriceHeaderClick(x, y))
+            else if (this.TryHandleMarketPriceHeaderClick(x, y))
             {
                 if (playSound)
                     Game1.playSound("smallSelect");
 
                 return;
             }
-
-            if (this.TryHandleMarketPriceRowClick(x, y))
+            else if (this.IsMarketPriceFavoriteAtPoint(x, y) && this.TryHandleMarketPriceRowClick(x, y))
             {
                 if (playSound)
                     Game1.playSound("smallSelect");
 
                 return;
             }
+        }
+
+        if (this.IsPointInScrollableContentArea(x, y) && this.GetMaxScrollOffset() > 0)
+        {
+            this.isScrollDragCandidate = true;
+            this.scrollDragStartX = x;
+            this.scrollDragStartY = y;
+            this.scrollDragLastY = y;
+            this.scrollDragPlaySound = playSound;
+            return;
+        }
+
+        if (this.currentTab == ReportTab.Market
+            && this.selectedMarketPriceEntry is null
+            && this.TryHandleMarketPriceRowClick(x, y)
+            && playSound)
+        {
+            Game1.playSound("smallSelect");
+        }
+    }
+
+    public override void leftClickHeld(int x, int y)
+    {
+        base.leftClickHeld(x, y);
+
+        if (!this.isScrollDragCandidate)
+            return;
+
+        if (!this.isScrollDragging)
+        {
+            if (Math.Abs(y - this.scrollDragStartY) < ScrollDragThreshold)
+                return;
+
+            this.isScrollDragging = true;
+        }
+
+        this.ChangeScrollOffset(this.scrollDragLastY - y);
+        this.scrollDragLastY = y;
+    }
+
+    public override void releaseLeftClick(int x, int y)
+    {
+        base.releaseLeftClick(x, y);
+
+        if (!this.isScrollDragCandidate)
+            return;
+
+        bool shouldHandleDeferredClick = !this.isScrollDragging
+            && Math.Abs(y - this.scrollDragStartY) < ScrollDragThreshold;
+        int clickX = this.scrollDragStartX;
+        int clickY = this.scrollDragStartY;
+        bool playSound = this.scrollDragPlaySound;
+
+        this.ResetScrollDrag();
+
+        if (shouldHandleDeferredClick
+            && this.currentTab == ReportTab.Market
+            && this.selectedMarketPriceEntry is null
+            && this.TryHandleMarketPriceRowClick(clickX, clickY)
+            && playSound)
+        {
+            Game1.playSound("smallSelect");
         }
     }
 
@@ -418,15 +498,43 @@ public class FinanceMenu : IClickableMenu, IKeyboardSubscriber
     public override void receiveScrollWheelAction(int direction)
     {
         if (direction > 0)
-            this.scrollOffset -= 80;
+            this.ChangeScrollOffset(-80);
         else if (direction < 0)
-            this.scrollOffset += 80;
+            this.ChangeScrollOffset(80);
+    }
+
+    private void ChangeScrollOffset(int delta)
+    {
+        if (delta == 0)
+            return;
 
         this.scrollOffset = Math.Clamp(
-            this.scrollOffset,
+            this.scrollOffset + delta,
             0,
             this.GetMaxScrollOffset()
         );
+    }
+
+    private bool IsPointInScrollableContentArea(int x, int y)
+    {
+        Rectangle contentArea = new Rectangle(
+            GetMenuX() + 50,
+            this.contentTop,
+            GetPreferredMenuWidth() - 100,
+            this.contentBottom - this.contentTop
+        );
+
+        return contentArea.Contains(x, y);
+    }
+
+    private void ResetScrollDrag()
+    {
+        this.isScrollDragCandidate = false;
+        this.isScrollDragging = false;
+        this.scrollDragStartX = 0;
+        this.scrollDragStartY = 0;
+        this.scrollDragLastY = 0;
+        this.scrollDragPlaySound = false;
     }
 
     public override void draw(SpriteBatch b)
@@ -754,32 +862,8 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
 
     private bool TryHandleMarketPriceRowClick(int x, int y)
     {
-        if (y < this.contentTop || y > this.contentBottom)
+        if (!this.TryGetMarketPriceRowAtPoint(x, y, out MarketPriceTableEntry entry, out int contentX, out int rowY))
             return false;
-
-        int menuX = GetMenuX();
-        int menuY = GetMenuY();
-        int contentX = menuX + 70;
-        int firstRowY = menuY + 180 - this.scrollOffset + MarketPriceRowsStartOffset;
-
-        int relativeY = y - firstRowY;
-
-        if (relativeY < 0)
-            return false;
-
-        int rowIndex = relativeY / MarketPriceRowHeight;
-        int rowOffset = relativeY % MarketPriceRowHeight;
-
-        if (rowOffset > 34)
-            return false;
-
-        List<MarketPriceTableEntry> entries = this.GetVisibleMarketPriceEntries();
-
-        if (rowIndex < 0 || rowIndex >= entries.Count)
-            return false;
-
-        MarketPriceTableEntry entry = entries[rowIndex];
-        int rowY = firstRowY + rowIndex * MarketPriceRowHeight;
 
         if (this.GetMarketPriceFavoriteBounds(contentX, rowY).Contains(x, y))
         {
@@ -804,6 +888,49 @@ this.DrawLine(b, I18n.Get("finance.annual_income", new { amount = $"{this.analyt
         this.selectedMarketPriceEntry = entry;
         this.scrollOffset = 0;
 
+        return true;
+    }
+
+    private bool IsMarketPriceFavoriteAtPoint(int x, int y)
+    {
+        return this.TryGetMarketPriceRowAtPoint(x, y, out _, out int contentX, out int rowY)
+            && this.GetMarketPriceFavoriteBounds(contentX, rowY).Contains(x, y);
+    }
+
+    private bool TryGetMarketPriceRowAtPoint(
+        int x,
+        int y,
+        out MarketPriceTableEntry entry,
+        out int contentX,
+        out int rowY
+    )
+    {
+        entry = null!;
+        contentX = GetMenuX() + 70;
+        rowY = 0;
+
+        if (y < this.contentTop || y > this.contentBottom)
+            return false;
+
+        int firstRowY = GetMenuY() + 180 - this.scrollOffset + MarketPriceRowsStartOffset;
+        int relativeY = y - firstRowY;
+
+        if (relativeY < 0)
+            return false;
+
+        int rowIndex = relativeY / MarketPriceRowHeight;
+        int rowOffset = relativeY % MarketPriceRowHeight;
+
+        if (rowOffset > 34)
+            return false;
+
+        List<MarketPriceTableEntry> entries = this.GetVisibleMarketPriceEntries();
+
+        if (rowIndex < 0 || rowIndex >= entries.Count)
+            return false;
+
+        entry = entries[rowIndex];
+        rowY = firstRowY + rowIndex * MarketPriceRowHeight;
         return true;
     }
 

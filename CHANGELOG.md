@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Financial Manual 新增按住鼠标左键或触摸后上下拖动正文滚动，并保留原有鼠标滚轮操作。
+- 交易所账户页保留原有自定义金额输入，并新增 `+100`、`+1K`、`+10K`、`+100K`、`清零` 快捷金额按钮；所有按钮与原输入框共用同一金额。
+- 快捷金额按钮用于 Android 系统键盘未弹出时的基础输入补充，不会直接执行转账，也不属于完整 Android 适配；Android 实机效果仍需玩家验证。
+- 本次仅为基础触屏滚动适配，不属于完整 Android UI 重构；Android 实机效果仍需玩家验证。
+- 将 Mod 版本更新为 `1.4.3`。
 - 修复带品质物品的商店售价、出货箱结算和 Tooltip，使其在普通品质标准 Market Price 上只应用一次品质系数。
 - 修复 Exchange 多头实物交割超过单堆上限时的物品丢失；交割现在会按实际堆叠上限拆分并在背包容量不足时完整失败。
 - Restored 7-day contract eligibility for fast-growing crops and fruit-tree produce.

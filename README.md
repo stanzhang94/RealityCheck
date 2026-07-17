@@ -2,7 +2,7 @@
 
 Reality Check 是 Stan 的 Stardew Valley 本地 SMAPI Mod。
 
-当前源码版本是 `1.4.2`。项目包含财务报表、税务、医保、市场价格、Financial Manual 和 Pelican Town Commodity Exchange。
+当前源码版本是 `1.4.3`。项目包含财务报表、税务、医保、市场价格、Financial Manual 和 Pelican Town Commodity Exchange。
 
 ## 阅读入口
 
@@ -21,7 +21,11 @@ Reality Check 是 Stan 的 Stardew Valley 本地 SMAPI Mod。
 dotnet build
 ```
 
-启动游戏后通过 SMAPI 进入存档，默认按 `O` 打开 Financial Manual。
+启动游戏后通过 SMAPI 进入存档，默认按 `O` 打开 Financial Manual。Financial Manual 支持鼠标滚轮，也支持在正文区域按住鼠标左键或触摸后上下拖动滚动。
+
+`1.4.3` 只增加基础拖动滚动，不属于完整 Android UI 适配；Android 端触屏效果仍需要玩家实机反馈验证。
+
+交易所账户页保留原有自定义金额输入和 PC 键盘操作，并增加 `+100`、`+1K`、`+10K`、`+100K`、`清零` 快捷按钮。按钮与原输入框共用同一金额，只帮助 Android 玩家在系统键盘未弹出时填写金额，不会直接执行存入或取出；Android 实机仍需玩家验证。
 
 `dotnet build` 通过不等于游戏内验收通过。UI、税务、市场价格和 Exchange 相关改动都需要进游戏确认。
 

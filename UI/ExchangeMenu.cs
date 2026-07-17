@@ -43,6 +43,10 @@ public class ExchangeMenu : IClickableMenu
     private const int PositionsListRowHeight = 44;
     private const int CreatePagePadding = 18;
     private const int CreatePageSectionGap = 22;
+    private const int TransferQuickCompactButtonWidth = 60;
+    private const int TransferQuickWideButtonWidth = 93;
+    private const int TransferQuickButtonHeight = 38;
+    private const int TransferQuickButtonGap = 6;
 
     private readonly ExchangeService exchangeService;
     private readonly ExchangeContractCatalogService? catalogService;
@@ -392,6 +396,9 @@ public class ExchangeMenu : IClickableMenu
             Game1.playSound("smallSelect");
             return;
         }
+
+        if (this.TryHandleTransferQuickAmountClick(x, y))
+            return;
 
         this.transferInputSelected = false;
 
@@ -1040,8 +1047,95 @@ public class ExchangeMenu : IClickableMenu
         );
 
         this.DrawInputBox(b);
+        this.DrawTransferQuickAmountButtons(b);
         this.DrawButton(b, this.depositButton, I18n.Get("exchange.deposit"));
         this.DrawButton(b, this.withdrawButton, I18n.Get("exchange.withdraw"));
+    }
+
+    private void DrawTransferQuickAmountButtons(SpriteBatch b)
+    {
+        for (int index = 0; index < 5; index++)
+        {
+            this.DrawButton(
+                b,
+                this.GetTransferQuickAmountButtonBounds(index),
+                this.GetTransferQuickAmountButtonLabel(index)
+            );
+        }
+    }
+
+    private Rectangle GetTransferQuickAmountButtonBounds(int index)
+    {
+        int quickButtonX = this.depositButton.Right + 12;
+
+        return index switch
+        {
+            0 => new Rectangle(quickButtonX, this.depositButton.Y + 2, TransferQuickCompactButtonWidth, TransferQuickButtonHeight),
+            1 => new Rectangle(quickButtonX + TransferQuickCompactButtonWidth + TransferQuickButtonGap, this.depositButton.Y + 2, TransferQuickCompactButtonWidth, TransferQuickButtonHeight),
+            2 => new Rectangle(quickButtonX + (TransferQuickCompactButtonWidth + TransferQuickButtonGap) * 2, this.depositButton.Y + 2, TransferQuickCompactButtonWidth, TransferQuickButtonHeight),
+            3 => new Rectangle(quickButtonX, this.withdrawButton.Y + 2, TransferQuickWideButtonWidth, TransferQuickButtonHeight),
+            _ => new Rectangle(quickButtonX + TransferQuickWideButtonWidth + TransferQuickButtonGap, this.withdrawButton.Y + 2, TransferQuickWideButtonWidth, TransferQuickButtonHeight)
+        };
+    }
+
+    private string GetTransferQuickAmountButtonLabel(int index)
+    {
+        return index switch
+        {
+            0 => "+100",
+            1 => "+1K",
+            2 => "+10K",
+            3 => "+100K",
+            _ => I18n.Get("exchange.transfer_clear")
+        };
+    }
+
+    private bool TryHandleTransferQuickAmountClick(int x, int y)
+    {
+        for (int index = 0; index < 5; index++)
+        {
+            if (!this.GetTransferQuickAmountButtonBounds(index).Contains(x, y))
+                continue;
+
+            if (index == 4)
+            {
+                this.transferAmountText = string.Empty;
+                this.accountMessage = string.Empty;
+                Game1.playSound("smallSelect");
+                return true;
+            }
+
+            int increment = index switch
+            {
+                0 => 100,
+                1 => 1_000,
+                2 => 10_000,
+                _ => 100_000
+            };
+
+            this.AddTransferQuickAmount(increment);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void AddTransferQuickAmount(int increment)
+    {
+        int currentAmount = 0;
+        string raw = this.transferAmountText.Trim();
+
+        if (!string.IsNullOrEmpty(raw) && (!int.TryParse(raw, out currentAmount) || currentAmount < 0))
+        {
+            this.SetAccountMessage(I18n.Get("exchange.error_invalid_amount"), succeeded: false);
+            Game1.playSound("cancel");
+            return;
+        }
+
+        long nextAmount = (long)currentAmount + Math.Max(0, increment);
+        this.transferAmountText = Math.Min(nextAmount, int.MaxValue).ToString();
+        this.accountMessage = string.Empty;
+        Game1.playSound("smallSelect");
     }
 
     private void DrawInputBox(SpriteBatch b)
